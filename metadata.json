@@ -1,0 +1,5 @@
+{
+  "name": "PDF Master",
+  "description": "A secure, client-side PDF manipulation tool for merging, organizing, and splitting documents without uploading data to a server.",
+  "requestFramePermissions": []
+}
