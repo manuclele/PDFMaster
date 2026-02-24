@@ -1,14 +1,19 @@
+export interface Point {
+  x: number;
+  y: number;
+}
+
 export interface UploadedFile {
   id: string;
   file: File;
   preview?: string;
   type: 'pdf' | 'image';
   rotation?: number;
-  crop?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
+  corners?: {
+    tl: Point;
+    tr: Point;
+    br: Point;
+    bl: Point;
   };
 }
 

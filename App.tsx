@@ -3,9 +3,9 @@ import { UploadedFile, ProcessingState, ViewMode } from './types';
 import { mergePdfs, createPdfBlob } from './utils/pdfHandler';
 import { Dropzone } from './components/Dropzone';
 import { FileGrid } from './components/FileGrid';
-import { ImageEditor } from './components/ImageEditor';
-import getCroppedImg from './utils/imageUtils';
-import { Area } from 'react-easy-crop';
+import { PerspectiveEditor } from './components/PerspectiveEditor';
+import { warpPerspective } from './utils/perspectiveUtils';
+import { Point } from './types';
 import { Layers, FileStack, ArrowRight, Download, RefreshCw, AlertCircle, Edit3 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -47,18 +47,35 @@ const App: React.FC = () => {
     setEditingFileId(id);
   };
 
-  const handleSaveEdit = async (croppedAreaPixels: Area, rotation: number) => {
+  const handleSaveEdit = async (corners: { tl: Point; tr: Point; br: Point; bl: Point }) => {
     if (!editingFileId) return;
 
     const fileToEdit = files.find(f => f.id === editingFileId);
     if (!fileToEdit || !fileToEdit.preview) return;
 
     try {
-      setStatus({ ...status, isProcessing: true, message: 'Saving image changes...' });
-      const croppedBlob = await getCroppedImg(fileToEdit.preview, croppedAreaPixels, rotation);
+      setStatus({ ...status, isProcessing: true, message: 'Correcting perspective...' });
       
-      if (croppedBlob) {
-        const newFile = new File([croppedBlob], fileToEdit.file.name, { type: 'image/jpeg' });
+      const img = new Image();
+      img.src = fileToEdit.preview;
+      await new Promise((resolve) => (img.onload = resolve));
+
+      // Calculate destination dimensions (maintain aspect ratio of the selected area if possible, 
+      // or just use a standard A4-like ratio or the bounding box ratio)
+      // For simplicity, let's use the average width and height of the selected quadrilateral
+      const widthTop = Math.sqrt((corners.tr.x - corners.tl.x) ** 2 + (corners.tr.y - corners.tl.y) ** 2);
+      const widthBottom = Math.sqrt((corners.br.x - corners.bl.x) ** 2 + (corners.br.y - corners.bl.y) ** 2);
+      const heightLeft = Math.sqrt((corners.bl.x - corners.tl.x) ** 2 + (corners.bl.y - corners.tl.y) ** 2);
+      const heightRight = Math.sqrt((corners.br.x - corners.tr.x) ** 2 + (corners.br.y - corners.tr.y) ** 2);
+      
+      const destWidth = Math.max(widthTop, widthBottom);
+      const destHeight = Math.max(heightLeft, heightRight);
+
+      const srcPoints = [corners.tl, corners.tr, corners.br, corners.bl];
+      const warpedBlob = await warpPerspective(img, srcPoints, destWidth, destHeight);
+      
+      if (warpedBlob) {
+        const newFile = new File([warpedBlob], fileToEdit.file.name, { type: 'image/jpeg' });
         const newPreview = URL.createObjectURL(newFile);
 
         setFiles(prev => prev.map(f => {
@@ -68,8 +85,7 @@ const App: React.FC = () => {
               ...f,
               file: newFile,
               preview: newPreview,
-              rotation,
-              crop: croppedAreaPixels
+              corners
             };
           }
           return f;
@@ -294,11 +310,10 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Image Editor Modal */}
+      {/* Perspective Editor Modal */}
       {editingFile && editingFile.preview && (
-        <ImageEditor
+        <PerspectiveEditor
           imageSrc={editingFile.preview}
-          initialRotation={editingFile.rotation}
           onSave={handleSaveEdit}
           onCancel={() => setEditingFileId(null)}
         />
