@@ -28,7 +28,7 @@ export const Dropzone: React.FC<DropzoneProps> = ({ onFilesSelected, disabled })
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const validFiles = Array.from(e.dataTransfer.files).filter(
-        (file: File) => file.type === 'application/pdf'
+        (file: File) => file.type === 'application/pdf' || file.type.startsWith('image/')
       );
       if (validFiles.length > 0) {
         onFilesSelected(validFiles);
@@ -38,7 +38,9 @@ export const Dropzone: React.FC<DropzoneProps> = ({ onFilesSelected, disabled })
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const validFiles = Array.from(e.target.files);
+      const validFiles = Array.from(e.target.files).filter(
+        (file: File) => file.type === 'application/pdf' || file.type.startsWith('image/')
+      );
       onFilesSelected(validFiles);
     }
   };
@@ -70,7 +72,7 @@ export const Dropzone: React.FC<DropzoneProps> = ({ onFilesSelected, disabled })
         onChange={handleFileInput}
         className="hidden"
         multiple
-        accept=".pdf"
+        accept=".pdf,image/*"
       />
       
       <div className="flex flex-col items-center justify-center space-y-4">
@@ -86,7 +88,7 @@ export const Dropzone: React.FC<DropzoneProps> = ({ onFilesSelected, disabled })
             {isDragOver ? 'Drop files now' : 'Click to upload or drag and drop'}
           </p>
           <p className="text-sm text-slate-500">
-            PDF documents only. Multiple files allowed.
+            PDF and common image formats (JPG, PNG). Multiple files allowed.
           </p>
         </div>
       </div>

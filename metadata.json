@@ -1,5 +1,5 @@
 {
   "name": "PDF Master",
-  "description": "A secure, client-side PDF manipulation tool for merging, organizing, and splitting documents without uploading data to a server.",
+  "description": "A secure, client-side PDF manipulation tool for merging PDFs and converting images (JPG, PNG) into a unified document with built-in editing tools.",
   "requestFramePermissions": []
 }

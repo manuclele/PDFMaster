@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { UploadedFile, ProcessingState, ViewMode } from './types';
 import { mergePdfs, createPdfBlob } from './utils/pdfHandler';
 import { Dropzone } from './components/Dropzone';
 import { FileGrid } from './components/FileGrid';
-import { Layers, FileStack, ArrowRight, Download, RefreshCw, AlertCircle } from 'lucide-react';
+import { ImageEditor } from './components/ImageEditor';
+import getCroppedImg from './utils/imageUtils';
+import { Area } from 'react-easy-crop';
+import { Layers, FileStack, ArrowRight, Download, RefreshCw, AlertCircle, Edit3 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('merge');
+  const [outputFilename, setOutputFilename] = useState<string>('merged-document');
+  const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [status, setStatus] = useState<ProcessingState>({
     isProcessing: false,
     message: '',
@@ -15,16 +20,67 @@ const App: React.FC = () => {
   });
 
   const handleFilesSelected = (newFiles: File[]) => {
-    const uploadedFiles: UploadedFile[] = newFiles.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-    }));
+    const uploadedFiles: UploadedFile[] = newFiles.map((file) => {
+      const type = file.type === 'application/pdf' ? 'pdf' : 'image';
+      return {
+        id: crypto.randomUUID(),
+        file,
+        type,
+        preview: type === 'image' ? URL.createObjectURL(file) : undefined,
+      };
+    });
     setFiles((prev) => [...prev, ...uploadedFiles]);
     setStatus({ ...status, error: null });
   };
 
   const handleRemove = (id: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== id));
+    setFiles((prev) => {
+      const fileToRemove = prev.find(f => f.id === id);
+      if (fileToRemove?.preview) {
+        URL.revokeObjectURL(fileToRemove.preview);
+      }
+      return prev.filter((f) => f.id !== id);
+    });
+  };
+
+  const handleEdit = (id: string) => {
+    setEditingFileId(id);
+  };
+
+  const handleSaveEdit = async (croppedAreaPixels: Area, rotation: number) => {
+    if (!editingFileId) return;
+
+    const fileToEdit = files.find(f => f.id === editingFileId);
+    if (!fileToEdit || !fileToEdit.preview) return;
+
+    try {
+      setStatus({ ...status, isProcessing: true, message: 'Saving image changes...' });
+      const croppedBlob = await getCroppedImg(fileToEdit.preview, croppedAreaPixels, rotation);
+      
+      if (croppedBlob) {
+        const newFile = new File([croppedBlob], fileToEdit.file.name, { type: 'image/jpeg' });
+        const newPreview = URL.createObjectURL(newFile);
+
+        setFiles(prev => prev.map(f => {
+          if (f.id === editingFileId) {
+            if (f.preview) URL.revokeObjectURL(f.preview);
+            return {
+              ...f,
+              file: newFile,
+              preview: newPreview,
+              rotation,
+              crop: croppedAreaPixels
+            };
+          }
+          return f;
+        }));
+      }
+    } catch (err) {
+      console.error('Error saving edit:', err);
+    } finally {
+      setEditingFileId(null);
+      setStatus({ ...status, isProcessing: false, message: '' });
+    }
   };
 
   const handleMove = (index: number, direction: 'left' | 'right') => {
@@ -52,10 +108,14 @@ const App: React.FC = () => {
       const mergedBytes = await mergePdfs(files);
       const url = createPdfBlob(mergedBytes);
       
+      // Determine filename
+      const safeName = outputFilename.trim() || 'merged-document';
+      const fileName = safeName.endsWith('.pdf') ? safeName : `${safeName}.pdf`;
+
       // Create download link
       const link = document.createElement('a');
       link.href = url;
-      link.download = `merged_${new Date().toISOString().slice(0, 10)}.pdf`;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -74,10 +134,16 @@ const App: React.FC = () => {
 
   const handleReset = () => {
     if (window.confirm('Are you sure you want to clear all files?')) {
+      files.forEach(f => {
+        if (f.preview) URL.revokeObjectURL(f.preview);
+      });
       setFiles([]);
+      setOutputFilename('merged-document');
       setStatus({ isProcessing: false, message: '', error: null });
     }
   };
+
+  const editingFile = files.find(f => f.id === editingFileId);
 
   return (
     <div className="min-h-screen pb-20">
@@ -149,29 +215,47 @@ const App: React.FC = () => {
                 files={files} 
                 onRemove={handleRemove} 
                 onMove={handleMove} 
+                onEdit={handleEdit}
               />
 
               {/* Floating Action Bar */}
               {files.length > 0 && (
-                <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white/80 backdrop-blur-md border border-slate-200 shadow-2xl rounded-2xl p-2 flex items-center space-x-3 z-40">
-                  <div className="pl-4 pr-2 text-sm font-medium text-slate-600 border-r border-slate-200">
-                    {files.length} file{files.length !== 1 ? 's' : ''} selected
-                  </div>
+                <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white/80 backdrop-blur-md border border-slate-200 shadow-2xl rounded-2xl p-2 flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-3 z-40">
                   
-                  <button
-                    onClick={handleReset}
-                    disabled={status.isProcessing}
-                    className="p-2.5 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                    title="Clear all"
-                  >
-                    <RefreshCw size={20} />
-                  </button>
+                  <div className="flex items-center space-x-3 w-full sm:w-auto justify-between sm:justify-start px-2">
+                    <div className="text-sm font-medium text-slate-600 pr-2 border-r border-slate-200">
+                      {files.length} file{files.length !== 1 ? 's' : ''}
+                    </div>
+                    
+                    <button
+                      onClick={handleReset}
+                      disabled={status.isProcessing}
+                      className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                      title="Clear all"
+                    >
+                      <RefreshCw size={20} />
+                    </button>
+                  </div>
+
+                  {/* Filename Input */}
+                  <div className="flex items-center bg-slate-50 rounded-xl px-3 py-2 border border-slate-200 focus-within:ring-2 focus-within:ring-primary-100 focus-within:border-primary-400 transition-all w-full sm:w-auto">
+                    <Edit3 size={14} className="text-slate-400 mr-2 flex-shrink-0" />
+                    <input
+                      type="text"
+                      value={outputFilename}
+                      onChange={(e) => setOutputFilename(e.target.value)}
+                      disabled={status.isProcessing}
+                      className="bg-transparent border-none outline-none text-sm text-slate-700 w-full sm:w-32 placeholder-slate-400"
+                      placeholder="Filename"
+                    />
+                    <span className="text-slate-400 text-sm font-medium select-none pl-1">.pdf</span>
+                  </div>
 
                   <button
                     onClick={handleMerge}
                     disabled={status.isProcessing || files.length < 2}
                     className={`
-                      flex items-center space-x-2 px-6 py-2.5 rounded-xl font-semibold text-white shadow-lg shadow-primary-500/30 transition-all transform active:scale-95
+                      w-full sm:w-auto flex items-center justify-center space-x-2 px-6 py-2.5 rounded-xl font-semibold text-white shadow-lg shadow-primary-500/30 transition-all transform active:scale-95
                       ${status.isProcessing || files.length < 2
                         ? 'bg-slate-300 cursor-not-allowed shadow-none'
                         : 'bg-primary-600 hover:bg-primary-700'
@@ -209,6 +293,16 @@ const App: React.FC = () => {
           )}
         </div>
       </main>
+
+      {/* Image Editor Modal */}
+      {editingFile && editingFile.preview && (
+        <ImageEditor
+          imageSrc={editingFile.preview}
+          initialRotation={editingFile.rotation}
+          onSave={handleSaveEdit}
+          onCancel={() => setEditingFileId(null)}
+        />
+      )}
     </div>
   );
 };

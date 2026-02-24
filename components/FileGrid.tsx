@@ -1,15 +1,16 @@
 import React from 'react';
 import { UploadedFile } from '../types';
 import { formatFileSize } from '../utils/formatters';
-import { FileText, X, ArrowLeft, ArrowRight } from 'lucide-react';
+import { FileText, X, ArrowLeft, ArrowRight, Image as ImageIcon, Edit2 } from 'lucide-react';
 
 interface FileGridProps {
   files: UploadedFile[];
   onRemove: (id: string) => void;
   onMove: (index: number, direction: 'left' | 'right') => void;
+  onEdit: (id: string) => void;
 }
 
-export const FileGrid: React.FC<FileGridProps> = ({ files, onRemove, onMove }) => {
+export const FileGrid: React.FC<FileGridProps> = ({ files, onRemove, onMove, onEdit }) => {
   if (files.length === 0) return null;
 
   return (
@@ -17,24 +18,47 @@ export const FileGrid: React.FC<FileGridProps> = ({ files, onRemove, onMove }) =
       {files.map((file, index) => (
         <div 
           key={file.id}
-          className="relative bg-white p-4 rounded-xl shadow-md border border-slate-100 group hover:shadow-lg transition-all duration-200"
+          className="relative bg-white p-4 rounded-xl shadow-md border border-slate-100 group hover:shadow-lg transition-all duration-200 flex flex-col"
         >
           {/* Header with Icon and Remove */}
           <div className="flex justify-between items-start mb-3">
-            <div className="p-2 bg-red-50 text-red-500 rounded-lg">
-              <FileText size={24} />
+            <div className={`p-2 rounded-lg ${file.type === 'pdf' ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
+              {file.type === 'pdf' ? <FileText size={24} /> : <ImageIcon size={24} />}
             </div>
-            <button
-              onClick={() => onRemove(file.id)}
-              className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded-full transition-colors"
-              aria-label="Remove file"
-            >
-              <X size={18} />
-            </button>
+            <div className="flex space-x-1">
+              {file.type === 'image' && (
+                <button
+                  onClick={() => onEdit(file.id)}
+                  className="text-slate-400 hover:text-primary-600 hover:bg-primary-50 p-1 rounded-full transition-colors"
+                  aria-label="Edit image"
+                >
+                  <Edit2 size={18} />
+                </button>
+              )}
+              <button
+                onClick={() => onRemove(file.id)}
+                className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded-full transition-colors"
+                aria-label="Remove file"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
+          {/* Preview for images */}
+          {file.type === 'image' && file.preview && (
+            <div className="mb-3 rounded-lg overflow-hidden bg-slate-100 aspect-video relative">
+              <img 
+                src={file.preview} 
+                alt={file.file.name} 
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          )}
+
           {/* File Info */}
-          <div className="mb-4">
+          <div className="mb-4 flex-1">
             <h3 className="font-medium text-slate-800 truncate" title={file.file.name}>
               {file.file.name}
             </h3>
