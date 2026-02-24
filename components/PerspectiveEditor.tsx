@@ -65,7 +65,26 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
   }, [updateDisplaySize]);
 
   const handleRotate = () => {
-    setRotation(prev => (prev + 90) % 360);
+    setRotation(prev => {
+      const nextRotation = (prev + 90) % 360;
+      // Rotate corners clockwise: (x, y) -> (1-y, x)
+      setCorners(prevCorners => ({
+        tl: { x: 1 - prevCorners.bl.y, y: prevCorners.bl.x },
+        tr: { x: 1 - prevCorners.tl.y, y: prevCorners.tl.x },
+        br: { x: 1 - prevCorners.tr.y, y: prevCorners.tr.x },
+        bl: { x: 1 - prevCorners.br.y, y: prevCorners.br.x },
+      }));
+      return nextRotation;
+    });
+  };
+
+  const handleResetGrid = () => {
+    setCorners({
+      tl: { x: 0, y: 0 },
+      tr: { x: 1, y: 0 },
+      br: { x: 1, y: 1 },
+      bl: { x: 0, y: 1 },
+    });
   };
 
   const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
@@ -75,6 +94,9 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     
     const rect = containerRef.current.getBoundingClientRect();
+    
+    // We need to handle the mouse position relative to the ROTATED image container
+    // But it's easier to just keep the corners relative to the visual display
     const x = (clientX - rect.left - displaySize.left) / displaySize.width;
     const y = (clientY - rect.top - displaySize.top) / displaySize.height;
     
@@ -90,18 +112,8 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
   const handleMouseUp = () => setActiveHandle(null);
 
   const handleSave = () => {
-    // Convert relative corners to pixel coordinates
-    // We need to account for rotation when mapping back to original image pixels
-    const pixelCorners = {
-      tl: { x: corners.tl.x, y: corners.tl.y },
-      tr: { x: corners.tr.x, y: corners.tr.y },
-      br: { x: corners.br.x, y: corners.br.y },
-      bl: { x: corners.bl.x, y: corners.bl.y },
-    };
-
-    // If rotated, we'd need complex mapping, but it's easier to just rotate the image data first
-    // For now, let's pass the rotation to onSave so App.tsx can handle it
-    (onSave as any)(pixelCorners, rotation);
+    // Pass corners and rotation to parent
+    (onSave as any)(corners, rotation);
   };
 
   return (
@@ -118,6 +130,14 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          <button
+            onClick={handleResetGrid}
+            className="flex items-center space-x-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg transition-all"
+            title="Reset to full image"
+          >
+            <Maximize2 size={18} />
+            <span className="hidden sm:inline">Full Image</span>
+          </button>
           <button
             onClick={handleRotate}
             className="flex items-center space-x-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all"

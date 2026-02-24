@@ -98,18 +98,43 @@ const App: React.FC = () => {
 
       const srcPoints = [pixelCorners.tl, pixelCorners.tr, pixelCorners.br, pixelCorners.bl];
       
-      // We need an HTMLImageElement for warpPerspective, or we can update warpPerspective to accept canvas
-      // Let's convert canvas back to image if needed
-      let finalSource: HTMLImageElement;
-      if (sourceImg instanceof HTMLCanvasElement) {
-        finalSource = new Image();
-        finalSource.src = sourceImg.toDataURL('image/jpeg');
-        await new Promise(resolve => finalSource.onload = resolve);
-      } else {
-        finalSource = sourceImg;
-      }
+      // Check if corners are basically at the edges (within 1% tolerance)
+      // If so, we can skip the expensive warp and just use the rotated image
+      const isFullImage = 
+        corners.tl.x < 0.01 && corners.tl.y < 0.01 &&
+        corners.tr.x > 0.99 && corners.tr.y < 0.01 &&
+        corners.br.x > 0.99 && corners.br.y > 0.99 &&
+        corners.bl.x < 0.01 && corners.bl.y > 0.99;
 
-      const warpedBlob = await warpPerspective(finalSource, srcPoints, destWidth, destHeight);
+      let warpedBlob: Blob | null;
+      
+      if (isFullImage) {
+        // Just convert the rotated canvas to blob
+        warpedBlob = await new Promise((resolve) => {
+          if (sourceImg instanceof HTMLCanvasElement) {
+            sourceImg.toBlob((blob) => resolve(blob), 'image/jpeg', 0.95);
+          } else {
+            // Should not happen if rotation != 0, but for safety:
+            const canvas = document.createElement('canvas');
+            canvas.width = sourceImg.naturalWidth;
+            canvas.height = sourceImg.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(sourceImg, 0, 0);
+            canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.95);
+          }
+        });
+      } else {
+        // We need an HTMLImageElement for warpPerspective
+        let finalSource: HTMLImageElement;
+        if (sourceImg instanceof HTMLCanvasElement) {
+          finalSource = new Image();
+          finalSource.src = sourceImg.toDataURL('image/jpeg');
+          await new Promise(resolve => finalSource.onload = resolve);
+        } else {
+          finalSource = sourceImg;
+        }
+        warpedBlob = await warpPerspective(finalSource, srcPoints, destWidth, destHeight);
+      }
       
       if (warpedBlob) {
         const newFile = new File([warpedBlob], fileToEdit.file.name, { type: 'image/jpeg' });
