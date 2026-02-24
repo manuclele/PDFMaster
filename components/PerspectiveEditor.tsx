@@ -240,19 +240,25 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
           </svg>
 
           {/* Handles */}
-          <div className="absolute inset-0 z-20">
+          <div className="absolute inset-0 z-20 pointer-events-none">
             {(Object.entries(corners) as [keyof typeof corners, Point][]).map(([key, point]) => (
               <div
                 key={key}
-                onMouseDown={() => setActiveHandle(key)}
-                onTouchStart={() => setActiveHandle(key)}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  setActiveHandle(key);
+                }}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  setActiveHandle(key);
+                }}
                 className={`
-                  absolute w-10 h-10 -ml-5 -mt-5 rounded-full border-2 border-white shadow-xl cursor-move transition-all flex items-center justify-center
-                  ${activeHandle === key ? 'bg-primary-500 scale-125 ring-4 ring-primary-500/30' : 'bg-primary-600/90 hover:bg-primary-500'}
+                  absolute w-10 h-10 -ml-5 -mt-5 rounded-full border-2 border-white shadow-xl cursor-move transition-transform flex items-center justify-center pointer-events-auto
+                  ${activeHandle === key ? 'bg-primary-500 scale-110 ring-4 ring-primary-500/30' : 'bg-primary-600/90 hover:bg-primary-500'}
                 `}
                 style={{
-                  left: `${point.x * 100}%`,
-                  top: `${point.y * 100}%`,
+                  left: point.x * displaySize.width,
+                  top: point.y * displaySize.height,
                 }}
               >
                 <div className="w-2 h-2 bg-white rounded-full shadow-sm" />
@@ -264,28 +270,28 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
         {/* Magnifier */}
         {activeHandle && (
           <div 
-            className="fixed pointer-events-none z-50 w-32 h-32 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-slate-900"
+            className="fixed pointer-events-none z-50 w-40 h-40 rounded-2xl border-4 border-white shadow-2xl overflow-hidden bg-slate-900 ring-4 ring-black/20"
             style={{
-              left: mousePos.x - 64,
-              top: mousePos.y - 160,
+              left: mousePos.x - 80,
+              top: mousePos.y - 200,
             }}
           >
             <div
               className="absolute"
               style={{
-                width: displaySize.width * 2.5,
-                height: displaySize.height * 2.5,
-                left: -(corners[activeHandle].x * displaySize.width * 2.5) + 64,
-                top: -(corners[activeHandle].y * displaySize.height * 2.5) + 64,
+                width: displaySize.width * 4,
+                height: displaySize.height * 4,
+                left: -(corners[activeHandle].x * displaySize.width * 4) + 80,
+                top: -(corners[activeHandle].y * displaySize.height * 4) + 80,
               }}
             >
               <div
                 className="absolute"
                 style={{
-                  width: isRotated ? displaySize.height * 2.5 : displaySize.width * 2.5,
-                  height: isRotated ? displaySize.width * 2.5 : displaySize.height * 2.5,
-                  left: isRotated ? (displaySize.width * 2.5 - displaySize.height * 2.5) / 2 : 0,
-                  top: isRotated ? (displaySize.height * 2.5 - displaySize.width * 2.5) / 2 : 0,
+                  width: isRotated ? displaySize.height * 4 : displaySize.width * 4,
+                  height: isRotated ? displaySize.width * 4 : displaySize.height * 4,
+                  left: isRotated ? (displaySize.width * 4 - displaySize.height * 4) / 2 : 0,
+                  top: isRotated ? (displaySize.height * 4 - displaySize.width * 4) / 2 : 0,
                   transform: `rotate(${rotation}deg)`,
                 }}
               >
@@ -298,9 +304,9 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
             </div>
             {/* Crosshair */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-full h-0.5 bg-primary-500/50" />
-              <div className="h-full w-0.5 bg-primary-500/50 absolute" />
-              <div className="w-2 h-2 border-2 border-primary-500 rounded-full" />
+              <div className="w-full h-px bg-primary-400/60" />
+              <div className="h-full w-px bg-primary-400/60 absolute" />
+              <div className="w-3 h-3 border-2 border-primary-400 rounded-full" />
             </div>
           </div>
         )}
