@@ -17,6 +17,7 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
   const imageRef = useRef<HTMLImageElement>(null);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0, left: 0, top: 0 });
+  const [rotation, setRotation] = useState(0);
   
   // Corners in relative coordinates (0 to 1)
   const [corners, setCorners] = useState({
@@ -33,8 +34,12 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
     const container = containerRef.current.getBoundingClientRect();
     const img = imageRef.current;
     
+    const isRotated = rotation % 180 !== 0;
+    const naturalWidth = isRotated ? img.naturalHeight : img.naturalWidth;
+    const naturalHeight = isRotated ? img.naturalWidth : img.naturalHeight;
+
     const containerAspect = container.width / container.height;
-    const imageAspect = img.naturalWidth / img.naturalHeight;
+    const imageAspect = naturalWidth / naturalHeight;
     
     let width, height;
     if (imageAspect > containerAspect) {
@@ -52,12 +57,16 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
       top: (container.height - height) / 2,
     });
     setImageSize({ width: img.naturalWidth, height: img.naturalHeight });
-  }, []);
+  }, [rotation]);
 
   useEffect(() => {
     window.addEventListener('resize', updateDisplaySize);
     return () => window.removeEventListener('resize', updateDisplaySize);
   }, [updateDisplaySize]);
+
+  const handleRotate = () => {
+    setRotation(prev => (prev + 90) % 360);
+  };
 
   const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!activeHandle || !containerRef.current) return;
@@ -82,13 +91,17 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
 
   const handleSave = () => {
     // Convert relative corners to pixel coordinates
+    // We need to account for rotation when mapping back to original image pixels
     const pixelCorners = {
-      tl: { x: corners.tl.x * imageSize.width, y: corners.tl.y * imageSize.height },
-      tr: { x: corners.tr.x * imageSize.width, y: corners.tr.y * imageSize.height },
-      br: { x: corners.br.x * imageSize.width, y: corners.br.y * imageSize.height },
-      bl: { x: corners.bl.x * imageSize.width, y: corners.bl.y * imageSize.height },
+      tl: { x: corners.tl.x, y: corners.tl.y },
+      tr: { x: corners.tr.x, y: corners.tr.y },
+      br: { x: corners.br.x, y: corners.br.y },
+      bl: { x: corners.bl.x, y: corners.bl.y },
     };
-    onSave(pixelCorners);
+
+    // If rotated, we'd need complex mapping, but it's easier to just rotate the image data first
+    // For now, let's pass the rotation to onSave so App.tsx can handle it
+    (onSave as any)(pixelCorners, rotation);
   };
 
   return (
@@ -104,12 +117,21 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
             <p className="text-xs text-slate-400">Drag corners to match the document edges</p>
           </div>
         </div>
-        <button 
-          onClick={onCancel}
-          className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-all"
-        >
-          <X size={24} />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleRotate}
+            className="flex items-center space-x-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all"
+          >
+            <RotateCw size={18} />
+            <span className="hidden sm:inline">Rotate 90°</span>
+          </button>
+          <button 
+            onClick={onCancel}
+            className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-all"
+          >
+            <X size={24} />
+          </button>
+        </div>
       </div>
 
       {/* Editor Area */}
@@ -122,20 +144,27 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
         onTouchMove={handleMouseMove}
         onTouchEnd={handleMouseUp}
       >
-        <img
-          ref={imageRef}
-          src={imageSrc}
-          alt="To edit"
-          onLoad={updateDisplaySize}
-          className="absolute pointer-events-none"
+        <div
+          className="absolute transition-transform duration-300"
           style={{
             width: displaySize.width,
             height: displaySize.height,
             left: displaySize.left,
             top: displaySize.top,
           }}
-          referrerPolicy="no-referrer"
-        />
+        >
+          <img
+            ref={imageRef}
+            src={imageSrc}
+            alt="To edit"
+            onLoad={updateDisplaySize}
+            className="w-full h-full object-contain pointer-events-none"
+            style={{
+              transform: `rotate(${rotation}deg)`,
+            }}
+            referrerPolicy="no-referrer"
+          />
+        </div>
 
         {/* Overlay SVG for lines */}
         <svg 

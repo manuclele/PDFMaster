@@ -47,7 +47,7 @@ const App: React.FC = () => {
     setEditingFileId(id);
   };
 
-  const handleSaveEdit = async (corners: { tl: Point; tr: Point; br: Point; bl: Point }) => {
+  const handleSaveEdit = async (corners: { tl: Point; tr: Point; br: Point; bl: Point }, rotation: number = 0) => {
     if (!editingFileId) return;
 
     const fileToEdit = files.find(f => f.id === editingFileId);
@@ -60,19 +60,56 @@ const App: React.FC = () => {
       img.src = fileToEdit.preview;
       await new Promise((resolve) => (img.onload = resolve));
 
-      // Calculate destination dimensions (maintain aspect ratio of the selected area if possible, 
-      // or just use a standard A4-like ratio or the bounding box ratio)
-      // For simplicity, let's use the average width and height of the selected quadrilateral
-      const widthTop = Math.sqrt((corners.tr.x - corners.tl.x) ** 2 + (corners.tr.y - corners.tl.y) ** 2);
-      const widthBottom = Math.sqrt((corners.br.x - corners.bl.x) ** 2 + (corners.br.y - corners.bl.y) ** 2);
-      const heightLeft = Math.sqrt((corners.bl.x - corners.tl.x) ** 2 + (corners.bl.y - corners.tl.y) ** 2);
-      const heightRight = Math.sqrt((corners.br.x - corners.tr.x) ** 2 + (corners.br.y - corners.tr.y) ** 2);
+      // If there's rotation, we need to rotate the image first or adjust points
+      // Let's rotate the image on a canvas first if rotation != 0
+      let sourceImg: HTMLImageElement | HTMLCanvasElement = img;
+      if (rotation !== 0) {
+        const canvas = document.createElement('canvas');
+        const isRotated = rotation % 180 !== 0;
+        canvas.width = isRotated ? img.naturalHeight : img.naturalWidth;
+        canvas.height = isRotated ? img.naturalWidth : img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate((rotation * Math.PI) / 180);
+          ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+          sourceImg = canvas;
+        }
+      }
+
+      const imgW = sourceImg instanceof HTMLCanvasElement ? sourceImg.width : sourceImg.naturalWidth;
+      const imgH = sourceImg instanceof HTMLCanvasElement ? sourceImg.height : sourceImg.naturalHeight;
+
+      const pixelCorners = {
+        tl: { x: corners.tl.x * imgW, y: corners.tl.y * imgH },
+        tr: { x: corners.tr.x * imgW, y: corners.tr.y * imgH },
+        br: { x: corners.br.x * imgW, y: corners.br.y * imgH },
+        bl: { x: corners.bl.x * imgW, y: corners.bl.y * imgH },
+      };
+
+      // Calculate destination dimensions
+      const widthTop = Math.sqrt((pixelCorners.tr.x - pixelCorners.tl.x) ** 2 + (pixelCorners.tr.y - pixelCorners.tl.y) ** 2);
+      const widthBottom = Math.sqrt((pixelCorners.br.x - pixelCorners.bl.x) ** 2 + (pixelCorners.br.y - pixelCorners.bl.y) ** 2);
+      const heightLeft = Math.sqrt((pixelCorners.bl.x - pixelCorners.tl.x) ** 2 + (pixelCorners.bl.y - pixelCorners.tl.y) ** 2);
+      const heightRight = Math.sqrt((pixelCorners.br.x - pixelCorners.tr.x) ** 2 + (pixelCorners.br.y - pixelCorners.tr.y) ** 2);
       
       const destWidth = Math.max(widthTop, widthBottom);
       const destHeight = Math.max(heightLeft, heightRight);
 
-      const srcPoints = [corners.tl, corners.tr, corners.br, corners.bl];
-      const warpedBlob = await warpPerspective(img, srcPoints, destWidth, destHeight);
+      const srcPoints = [pixelCorners.tl, pixelCorners.tr, pixelCorners.br, pixelCorners.bl];
+      
+      // We need an HTMLImageElement for warpPerspective, or we can update warpPerspective to accept canvas
+      // Let's convert canvas back to image if needed
+      let finalSource: HTMLImageElement;
+      if (sourceImg instanceof HTMLCanvasElement) {
+        finalSource = new Image();
+        finalSource.src = sourceImg.toDataURL('image/jpeg');
+        await new Promise(resolve => finalSource.onload = resolve);
+      } else {
+        finalSource = sourceImg;
+      }
+
+      const warpedBlob = await warpPerspective(finalSource, srcPoints, destWidth, destHeight);
       
       if (warpedBlob) {
         const newFile = new File([warpedBlob], fileToEdit.file.name, { type: 'image/jpeg' });
