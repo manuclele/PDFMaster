@@ -4,6 +4,7 @@ import { mergePdfs, createPdfBlob } from './utils/pdfHandler';
 import { Dropzone } from './components/Dropzone';
 import { FileGrid } from './components/FileGrid';
 import { PerspectiveEditor } from './components/PerspectiveEditor';
+import { SplitView } from './components/SplitView';
 import { warpPerspective } from './utils/perspectiveUtils';
 import { Point } from './types';
 import { Layers, FileStack, ArrowRight, Download, RefreshCw, AlertCircle, Edit3 } from 'lucide-react';
@@ -234,27 +235,39 @@ const App: React.FC = () => {
             </div>
             <span className="text-xl font-bold text-slate-800 tracking-tight">PDF Master</span>
           </div>
-          <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg">
-            <button
-              onClick={() => setViewMode('merge')}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                viewMode === 'merge' 
-                  ? 'bg-white text-primary-600 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Merge
-            </button>
-            <button
-              onClick={() => setViewMode('split')}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                viewMode === 'split' 
-                  ? 'bg-white text-primary-600 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Split
-            </button>
+          <div className="flex items-center space-x-4">
+            <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg">
+              <button
+                onClick={() => setViewMode('merge')}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  viewMode === 'merge' 
+                    ? 'bg-white text-primary-600 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Merge
+              </button>
+              <button
+                onClick={() => setViewMode('split')}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  viewMode === 'split' 
+                    ? 'bg-white text-primary-600 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Split
+              </button>
+            </div>
+            
+            {files.length > 0 && viewMode === 'merge' && (
+              <button
+                onClick={handleReset}
+                className="hidden sm:flex items-center space-x-2 px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all border border-transparent hover:border-red-100"
+              >
+                <RefreshCw size={16} />
+                <span>New Merge</span>
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -264,12 +277,12 @@ const App: React.FC = () => {
         {/* Header Section */}
         <div className="text-center mb-10">
           <h1 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            {viewMode === 'merge' ? 'Merge PDF Files' : 'Split PDF Files'}
+            {viewMode === 'merge' ? 'Merge PDF Files' : 'AI Smart Split'}
           </h1>
           <p className="text-slate-500 text-lg max-w-2xl mx-auto">
             {viewMode === 'merge' 
               ? 'Combine multiple PDFs into one unified document. Drag and drop your files, reorder them, and click merge. Secure and client-side.'
-              : 'Coming soon. Quickly extract pages from your PDF documents.'}
+              : 'Upload a large PDF (like tax returns for multiple employees) and let AI automatically split and name them for you.'}
           </p>
         </div>
 
@@ -357,17 +370,7 @@ const App: React.FC = () => {
               )}
             </>
           ) : (
-            <div className="text-center py-20 bg-white border border-dashed border-slate-200 rounded-2xl">
-              <Download size={48} className="mx-auto text-slate-300 mb-4" />
-              <h3 className="text-lg font-medium text-slate-600">Split Feature Coming Soon</h3>
-              <p className="text-slate-400 mt-2">We are currently working on this feature.</p>
-              <button 
-                onClick={() => setViewMode('merge')}
-                className="mt-6 text-primary-600 font-medium hover:underline"
-              >
-                Go back to Merge
-              </button>
-            </div>
+            <SplitView />
           )}
         </div>
       </main>
