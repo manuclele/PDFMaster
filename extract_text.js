@@ -3,7 +3,13 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 (async () => {
   const data = new Uint8Array(fs.readFileSync('dummy.pdf'));
-  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const pdf = await pdfjsLib.getDocument({ 
+    data,
+    standardFontDataUrl: `./node_modules/pdfjs-dist/standard_fonts/`,
+    cMapUrl: `./node_modules/pdfjs-dist/cmaps/`,
+    cMapPacked: true,
+    disableFontFace: false,
+  }).promise;
   const numPages = pdf.numPages;
   console.log('Number of pages:', numPages);
   for (let i = 1; i <= numPages; i++) {

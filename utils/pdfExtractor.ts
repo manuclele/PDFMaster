@@ -7,7 +7,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 export async function extractTextFromPdf(file: File): Promise<{ page: number, text: string }[]> {
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjsLib.getDocument({ 
+    data: arrayBuffer,
+    standardFontDataUrl: `/node_modules/pdfjs-dist/standard_fonts/`,
+    cMapUrl: `/node_modules/pdfjs-dist/cmaps/`,
+    cMapPacked: true,
+    disableFontFace: false,
+  }).promise;
   const numPages = pdf.numPages;
   const pagesText = [];
 

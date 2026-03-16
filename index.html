@@ -37,12 +37,6 @@
   <body>
     <div id="root"></div>
     <script>
-      window.addEventListener('error', function(e) {
-        document.body.innerHTML += '<div style="color:red; padding:20px; z-index:9999; position:absolute; top:0; left:0; background:white;">Error: ' + e.message + '<br>' + e.filename + ':' + e.lineno + '</div>';
-      });
-      window.addEventListener('unhandledrejection', function(e) {
-        document.body.innerHTML += '<div style="color:red; padding:20px; z-index:9999; position:absolute; top:50px; left:0; background:white;">Unhandled Promise Rejection: ' + e.reason + '</div>';
-      });
       // Polyfill process for pdfjs-dist
       if (typeof process === 'undefined') {
         window.process = { env: {} };
