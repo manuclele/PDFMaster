@@ -40,9 +40,18 @@ export const SplitView: React.FC = () => {
       const plans = await analyzePdfSplits(pagesText);
       setSplitPlans(plans);
       setStatus({ isProcessing: false, message: '', error: null });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setStatus({ isProcessing: false, message: '', error: 'Failed to analyze PDF. Please try again.' });
+      let errorMessage = 'Failed to analyze PDF. Please try again.';
+      if (err.message && err.message.startsWith('DIAGNOSTIC_ERROR:')) {
+        try {
+          const diag = JSON.parse(err.message.replace('DIAGNOSTIC_ERROR: ', ''));
+          errorMessage = `PDF Error: ${diag.message} (${diag.name}). Details: ${diag.details}`;
+        } catch {
+          errorMessage = err.message;
+        }
+      }
+      setStatus({ isProcessing: false, message: '', error: errorMessage });
     }
   };
 
