@@ -1,18 +1,18 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || 'dummy-key' });
-
-export interface SplitPlan {
-  name: string;
-  startPage: number;
-  endPage: number;
-}
+const getApiKey = () => {
+  const key = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (!key || key === 'dummy-key') return null;
+  return key;
+};
 
 export async function analyzePdfSplits(pagesText: { page: number, text: string }[]): Promise<SplitPlan[]> {
-  if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'dummy-key') {
-    throw new Error("API_KEY_MISSING: La chiave API di Gemini non è configurata correttamente su Vercel. Controlla le variabili d'ambiente.");
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error("API_KEY_MISSING: La chiave API di Gemini non è configurata. Aggiungi GEMINI_API_KEY alle variabili d'ambiente di Vercel.");
   }
 
+  const ai = new GoogleGenAI({ apiKey });
   const prompt = `
     Analyze the following text extracted from a multi-page PDF document containing tax returns (or similar documents) for multiple employees/people.
     Identify the start and end pages for each person's document.

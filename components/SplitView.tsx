@@ -43,12 +43,10 @@ export const SplitView: React.FC = () => {
       setStatus({ isProcessing: false, message: '', error: null });
     } catch (err: any) {
       console.error('Full Error Object:', err);
-      let displayError = '';
+      let displayError = err.message || 'Errore imprevisto durante l\'analisi.';
       
-      if (err.message && err.message.includes('DIAGNOSTIC_ERROR:')) {
-        displayError = `ERRORE PDF: ${err.message.split('DIAGNOSTIC_ERROR:')[1]}`;
-      } else {
-        displayError = `ERRORE GENERICO: ${err.message || JSON.stringify(err)}`;
+      if (displayError.includes('API_KEY_MISSING')) {
+        displayError = "Chiave API mancante. Configura GEMINI_API_KEY su Vercel per attivare l'intelligenza artificiale.";
       }
       
       setStatus({ isProcessing: false, message: '', error: displayError });
