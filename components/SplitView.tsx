@@ -17,6 +17,18 @@ export const SplitView: React.FC = () => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editPlan, setEditPlan] = useState<SplitPlan | null>(null);
 
+  const reset = () => {
+    setFile(null);
+    setSplitPlans([]);
+    setStatus({
+      isProcessing: false,
+      message: '',
+      error: null,
+    });
+    setEditingIndex(null);
+    setEditPlan(null);
+  };
+
   const handleFilesSelected = async (newFiles: File[]) => {
     const pdfFile = newFiles.find(f => f.type === 'application/pdf');
     if (!pdfFile) {
@@ -94,6 +106,18 @@ export const SplitView: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
+      {(file || status.error) && (
+        <div className="flex justify-end">
+          <button
+            onClick={reset}
+            className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+          >
+            <X size={16} />
+            <span>Annulla e Ricomincia</span>
+          </button>
+        </div>
+      )}
+
       {!file && (
         <Dropzone 
           onFilesSelected={handleFilesSelected} 
@@ -117,20 +141,9 @@ export const SplitView: React.FC = () => {
 
       {file && !status.isProcessing && splitPlans.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-slate-200 flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-bold text-slate-800">Proposed Split Plan</h2>
-              <p className="text-sm text-slate-500 mt-1">Review the recognized documents and adjust if necessary.</p>
-            </div>
-            <button
-              onClick={() => {
-                setFile(null);
-                setSplitPlans([]);
-              }}
-              className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-            >
-              Start Over
-            </button>
+          <div className="p-6 border-b border-slate-200">
+            <h2 className="text-xl font-bold text-slate-800">Proposed Split Plan</h2>
+            <p className="text-sm text-slate-500 mt-1">Review the recognized documents and adjust if necessary.</p>
           </div>
 
           <div className="divide-y divide-slate-100">
