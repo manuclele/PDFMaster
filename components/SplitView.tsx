@@ -27,31 +27,31 @@ export const SplitView: React.FC = () => {
     setStatus({ isProcessing: true, message: 'Extracting text from PDF...', error: null });
 
     try {
+      setStatus({ isProcessing: true, message: '1/2: Estrazione testo dal PDF...', error: null });
       const pagesText = await extractTextFromPdf(pdfFile);
       
       const totalTextLength = pagesText.reduce((acc, curr) => acc + curr.text.trim().length, 0);
       if (totalTextLength === 0) {
-        setStatus({ isProcessing: false, message: '', error: 'No text found in the PDF. It might be a scanned document or an image-based PDF. Please upload a text-based PDF.' });
+        setStatus({ isProcessing: false, message: '', error: 'Il PDF sembra vuoto o composto solo da immagini (scansioni). L\'AI ha bisogno di testo leggibile.' });
         return;
       }
 
-      setStatus({ isProcessing: true, message: 'Analyzing document structure with AI...', error: null });
+      setStatus({ isProcessing: true, message: '2/2: Analisi struttura con AI...', error: null });
       
       const plans = await analyzePdfSplits(pagesText);
       setSplitPlans(plans);
       setStatus({ isProcessing: false, message: '', error: null });
     } catch (err: any) {
-      console.error(err);
-      let errorMessage = 'Failed to analyze PDF. Please try again.';
-      if (err.message && err.message.startsWith('DIAGNOSTIC_ERROR:')) {
-        try {
-          const diag = JSON.parse(err.message.replace('DIAGNOSTIC_ERROR: ', ''));
-          errorMessage = `PDF Error: ${diag.message} (${diag.name}). Details: ${diag.details}`;
-        } catch {
-          errorMessage = err.message;
-        }
+      console.error('Full Error Object:', err);
+      let displayError = '';
+      
+      if (err.message && err.message.includes('DIAGNOSTIC_ERROR:')) {
+        displayError = `ERRORE PDF: ${err.message.split('DIAGNOSTIC_ERROR:')[1]}`;
+      } else {
+        displayError = `ERRORE GENERICO: ${err.message || JSON.stringify(err)}`;
       }
-      setStatus({ isProcessing: false, message: '', error: errorMessage });
+      
+      setStatus({ isProcessing: false, message: '', error: displayError });
     }
   };
 

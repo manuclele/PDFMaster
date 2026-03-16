@@ -9,6 +9,10 @@ export interface SplitPlan {
 }
 
 export async function analyzePdfSplits(pagesText: { page: number, text: string }[]): Promise<SplitPlan[]> {
+  if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'dummy-key') {
+    throw new Error("API_KEY_MISSING: La chiave API di Gemini non è configurata correttamente su Vercel. Controlla le variabili d'ambiente.");
+  }
+
   const prompt = `
     Analyze the following text extracted from a multi-page PDF document containing tax returns (or similar documents) for multiple employees/people.
     Identify the start and end pages for each person's document.
