@@ -33,22 +33,32 @@
         background-color: #f8fafc;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "lucide-react": "https://esm.sh/lucide-react@^0.560.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.2/",
-    "react/": "https://esm.sh/react@^19.2.2/",
-    "react": "https://esm.sh/react@^19.2.2",
-    "pdf-lib": "https://esm.sh/pdf-lib@^1.17.1",
-    "vite": "https://esm.sh/vite@^7.2.7",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
-  }
-}
-</script>
-</head>
+  </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.addEventListener('error', function(e) {
+        document.body.innerHTML += '<div style="color:red; padding:20px; z-index:9999; position:absolute; top:0; left:0; background:white;">Error: ' + e.message + '<br>' + e.filename + ':' + e.lineno + '</div>';
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        document.body.innerHTML += '<div style="color:red; padding:20px; z-index:9999; position:absolute; top:50px; left:0; background:white;">Unhandled Promise Rejection: ' + e.reason + '</div>';
+      });
+      // Polyfill process for pdfjs-dist
+      if (typeof process === 'undefined') {
+        window.process = { env: {} };
+      }
+      // Polyfill for Promise.withResolvers required by pdfjs-dist v4+
+      if (typeof Promise.withResolvers === 'undefined') {
+        Promise.withResolvers = function () {
+          let resolve, reject;
+          const promise = new Promise((res, rej) => {
+            resolve = res;
+            reject = rej;
+          });
+          return { promise, resolve, reject };
+        };
+      }
+    </script>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
