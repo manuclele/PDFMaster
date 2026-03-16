@@ -28,6 +28,13 @@ export const SplitView: React.FC = () => {
 
     try {
       const pagesText = await extractTextFromPdf(pdfFile);
+      
+      const totalTextLength = pagesText.reduce((acc, curr) => acc + curr.text.trim().length, 0);
+      if (totalTextLength === 0) {
+        setStatus({ isProcessing: false, message: '', error: 'No text found in the PDF. It might be a scanned document or an image-based PDF. Please upload a text-based PDF.' });
+        return;
+      }
+
       setStatus({ isProcessing: true, message: 'Analyzing document structure with AI...', error: null });
       
       const plans = await analyzePdfSplits(pagesText);

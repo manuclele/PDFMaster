@@ -1,18 +1,20 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-// @ts-ignore
-import pdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 
-// Set worker source using Vite's URL import
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+const PDFJS_VERSION = '5.5.207';
+const CDN_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}`;
+
+// Set worker source using CDN for better compatibility in production/installed apps
+pdfjsLib.GlobalWorkerOptions.workerSrc = `${CDN_URL}/legacy/build/pdf.worker.min.mjs`;
 
 export async function extractTextFromPdf(file: File): Promise<{ page: number, text: string }[]> {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ 
     data: arrayBuffer,
-    standardFontDataUrl: `/node_modules/pdfjs-dist/standard_fonts/`,
-    cMapUrl: `/node_modules/pdfjs-dist/cmaps/`,
+    standardFontDataUrl: `${CDN_URL}/standard_fonts/`,
+    cMapUrl: `${CDN_URL}/cmaps/`,
     cMapPacked: true,
     disableFontFace: false,
+    useWorkerFetch: false,
   }).promise;
   const numPages = pdf.numPages;
   const pagesText = [];
