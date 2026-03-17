@@ -365,15 +365,15 @@ export const ProcessView: React.FC = () => {
       // Create a temporary container for the PDF export
       const exportContainer = document.createElement('div');
       exportContainer.className = 'pdf-export-container';
-      // We make it visible but behind a loading overlay to ensure browser renders it
-      exportContainer.style.position = 'fixed';
-      exportContainer.style.left = '50%';
-      exportContainer.style.top = '50%';
-      exportContainer.style.transform = 'translate(-50%, -50%)';
+      // Position it at the very top left of the document to ensure correct coordinate capture
+      exportContainer.style.position = 'absolute';
+      exportContainer.style.left = '0';
+      exportContainer.style.top = '0';
       exportContainer.style.width = '800px';
       exportContainer.style.maxHeight = 'none';
       exportContainer.style.overflow = 'visible';
       exportContainer.style.zIndex = '-9999';
+      exportContainer.style.pointerEvents = 'none';
       exportContainer.style.backgroundColor = 'white';
       exportContainer.style.padding = '40px';
       exportContainer.style.boxSizing = 'border-box';
@@ -384,11 +384,14 @@ export const ProcessView: React.FC = () => {
       styleTag.innerHTML = `
         .pdf-export-container * { box-sizing: border-box !important; }
         .pdf-export-container .markdown-body { font-size: 11pt !important; line-height: 1.5 !important; }
-        .pdf-export-container table { width: 100% !important; border-collapse: collapse !important; margin: 15px 0 !important; table-layout: fixed !important; }
+        .pdf-export-container table { width: 100% !important; border-collapse: collapse !important; margin: 15px 0 !important; table-layout: fixed !important; page-break-inside: auto !important; }
+        .pdf-export-container tr { page-break-inside: avoid !important; page-break-after: auto !important; }
+        .pdf-export-container thead { display: table-header-group !important; }
         .pdf-export-container th, .pdf-export-container td { border: 1px solid #e2e8f0 !important; padding: 8px !important; word-break: break-word !important; font-size: 9pt !important; }
         .pdf-export-container th { background-color: #f8fafc !important; }
         .pdf-export-container pre { white-space: pre-wrap !important; word-break: break-all !important; background: #f1f5f9 !important; padding: 10px !important; border-radius: 5px !important; }
         .pdf-export-container p, .pdf-export-container li { word-break: break-word !important; }
+        .pdf-export-container .report-section { page-break-inside: avoid !important; margin-bottom: 25px !important; }
       `;
       exportContainer.appendChild(styleTag);
       
@@ -420,7 +423,7 @@ export const ProcessView: React.FC = () => {
       
       if (specificMessage) {
         const msgDiv = document.createElement('div');
-        msgDiv.className = 'markdown-body';
+        msgDiv.className = 'markdown-body report-section';
         
         const originalMsgEl = targetElement.querySelectorAll('.animate-in')[messages.indexOf(specificMessage)];
         const markdownContent = originalMsgEl?.querySelector('.markdown-body')?.cloneNode(true) as HTMLElement;
@@ -434,8 +437,7 @@ export const ProcessView: React.FC = () => {
       } else {
         messages.forEach((msg, idx) => {
           const section = document.createElement('div');
-          section.style.marginBottom = '30px';
-          section.style.pageBreakInside = 'avoid';
+          section.className = 'report-section';
           
           const label = document.createElement('div');
           label.style.fontSize = '9pt';
@@ -513,7 +515,7 @@ export const ProcessView: React.FC = () => {
         y: 10,
         width: 190,
         windowWidth: 800,
-        autoPaging: 'text'
+        autoPaging: 'slice'
       });
     } catch (err: any) {
       console.error(err);
