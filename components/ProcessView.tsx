@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ProcessingState, ChatMessage, ChatSession, PromptPreset } from '../types';
 import { Dropzone } from './Dropzone';
 import { extractTextFromPdf } from '../utils/pdfExtractor';
-import { chatWithPdf } from '../services/geminiService';
+import { chatWithPdf, generateChatTitle } from '../services/geminiService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { 
@@ -99,7 +99,7 @@ export const ProcessView: React.FC = () => {
         
         const updatedSession: ChatSession = {
           id: currentSessionId,
-          title: existingIdx >= 0 && prev[existingIdx].title !== 'Nuova Chat...' ? prev[existingIdx].title : title,
+          title: existingIdx >= 0 && !prev[existingIdx].title.startsWith('Nuova Chat') && prev[existingIdx].title !== title ? prev[existingIdx].title : title,
           messages,
           timestamp: Date.now(),
           fileNames: files.map(f => f.name)
@@ -165,6 +165,14 @@ export const ProcessView: React.FC = () => {
     try {
       const contextText = pagesText.map(p => ({ page: p.page, text: `[File: ${p.fileName}, Pagina: ${p.page}]\n${p.text}` }));
       const response = await chatWithPdf(contextText, userMessage, messages);
+      
+      // Generate title if it's the first exchange
+      if (messages.length === 0) {
+        generateChatTitle(userMessage, response).then(title => {
+          setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, title } : s));
+        });
+      }
+      
       setMessages(prev => [...prev, { role: 'model', text: response }]);
       setStatus({ isProcessing: false, message: '', error: null });
     } catch (err: any) {
@@ -316,42 +324,36 @@ export const ProcessView: React.FC = () => {
       document.body.appendChild(exportContainer);
 
       // Wait a bit for images and styles to be fully applied
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 800));
 
-      const canvas = await html2canvas(exportContainer, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-      
-      document.body.removeChild(exportContainer);
-
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pdfWidth - 20; // 10mm margin each side
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
       
-      let heightLeft = imgHeight;
-      let position = 10; // 10mm top margin
-
-      pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-      heightLeft -= (pdfHeight - 20);
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight + 10;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-        heightLeft -= (pdfHeight - 20);
-      }
-
-      pdf.save(`Report_Analisi_${new Date().getTime()}.pdf`);
-      setStatus({ isProcessing: false, message: '', error: null });
+      // Use jspdf's html method for better quality and selectable text
+      await pdf.html(exportContainer, {
+        callback: (doc) => {
+          const session = sessions.find(s => s.id === currentSessionId);
+          const fileName = specificMessage 
+            ? `Risposta_AI_${new Date().getTime()}.pdf` 
+            : `${session?.title.replace(/[^a-z0-9]/gi, '_') || 'Report'}_${new Date().getTime()}.pdf`;
+          doc.save(fileName);
+          setStatus({ isProcessing: false, message: '', error: null });
+          if (document.body.contains(exportContainer)) {
+            document.body.removeChild(exportContainer);
+          }
+        },
+        x: 10,
+        y: 10,
+        width: pdfWidth - 20,
+        windowWidth: 800,
+        autoPaging: 'text'
+      });
     } catch (err: any) {
       console.error(err);
       setStatus({ isProcessing: false, message: '', error: `Errore durante l'esportazione: ${err.message}` });
+      // Cleanup if error
+      const container = document.querySelector('.pdf-export-container');
+      if (container) document.body.removeChild(container);
     }
   };
 
@@ -452,6 +454,16 @@ export const ProcessView: React.FC = () => {
           </div>
           
           <div className="flex items-center space-x-2">
+            {files.length > 0 && messages.length > 0 && (
+              <button 
+                onClick={() => exportToPdf()} 
+                className="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all text-xs font-bold shadow-sm"
+                title="Esporta l'intera conversazione in PDF"
+              >
+                <Download size={16} />
+                <span className="hidden sm:inline">Esporta Report</span>
+              </button>
+            )}
             {files.length > 0 && (
               <button onClick={saveAsPreset} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Salva come Preset">
                 <Save size={18} />
@@ -497,13 +509,16 @@ export const ProcessView: React.FC = () => {
                           </div>
                         </div>
                         {msg.role === 'model' && (
-                          <button 
-                            onClick={() => exportToPdf(msg)}
-                            className="absolute -right-12 top-0 p-2 bg-white border border-slate-200 rounded-lg shadow-sm text-indigo-600 opacity-0 group-hover/msg:opacity-100 transition-opacity hover:bg-indigo-50"
-                            title="Esporta solo questa risposta"
-                          >
-                            <Download size={16} />
-                          </button>
+                          <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-end">
+                            <button 
+                              onClick={() => exportToPdf(msg)}
+                              className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm text-indigo-600 hover:bg-indigo-50 transition-all text-xs font-bold"
+                              title="Esporta solo questa risposta in PDF"
+                            >
+                              <Download size={14} />
+                              <span>Esporta Risposta</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -524,15 +539,7 @@ export const ProcessView: React.FC = () => {
                 <div ref={chatEndRef} />
               </div>
 
-              {/* Action Buttons Overlay */}
-              {messages.length > 0 && !status.isProcessing && (
-                <div className="absolute bottom-28 right-8 flex flex-col space-y-2">
-                  <button onClick={() => exportToPdf()} className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 text-white rounded-full shadow-xl hover:bg-indigo-700 transition-all active:scale-95 text-sm font-bold">
-                    <Download size={18} />
-                    <span>Esporta Report</span>
-                  </button>
-                </div>
-              )}
+              {/* Action Buttons Overlay removed - moved to header */}
             </>
           )}
         </div>

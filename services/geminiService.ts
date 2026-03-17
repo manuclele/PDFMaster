@@ -168,3 +168,26 @@ export async function chatWithPdf(pagesText: { page: number, text: string }[], u
 
   return response.text || "Non sono riuscito a generare una risposta.";
 }
+
+export async function generateChatTitle(userMessage: string, modelResponse: string): Promise<string> {
+  const apiKey = getApiKey();
+  if (!apiKey) return "Nuova Chat";
+
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = `
+    In base a questa conversazione tra un utente e un assistente AI che analizza PDF, genera un titolo brevissimo (massimo 4-5 parole) e descrittivo per la chat.
+    Esempi: "Analisi Carburanti Febbraio", "Riepilogo Fatture 2023", "Controllo Spese Trasporto".
+    
+    Utente: ${userMessage.slice(0, 200)}
+    Assistente: ${modelResponse.slice(0, 200)}
+    
+    Restituisci solo il titolo, senza virgolette o altro testo.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: prompt,
+  });
+
+  return response.text?.trim() || "Nuova Chat";
+}
