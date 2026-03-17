@@ -40,13 +40,11 @@ export const ProcessView: React.FC = () => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [presets, setPresets] = useState<PromptPreset[]>([]);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [showPresetModal, setShowPresetModal] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
   const [showPresets, setShowPresets] = useState(false);
   
-  const [status, setStatus] = useState<ProcessingState>({
-    isProcessing: false,
-    message: '',
-    error: null,
-  });
+  const [status, setStatus] = useState<ProcessingState>({ isProcessing: false, message: '', error: null });
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -94,28 +92,36 @@ export const ProcessView: React.FC = () => {
     if (messages.length > 0) {
       setSessions(prev => {
         const existingIdx = prev.findIndex(s => s.id === currentSessionId);
-        const userMsg = messages.find(m => m.role === 'user');
-        const title = userMsg ? userMsg.text.slice(0, 30) + '...' : 'Nuova Chat';
+        
+        let title = 'Nuova Chat';
+        if (existingIdx >= 0) {
+          title = prev[existingIdx].title;
+        } else {
+          const userMsg = messages.find(m => m.role === 'user');
+          title = userMsg ? userMsg.text.slice(0, 30) + '...' : 'Nuova Chat';
+        }
         
         const updatedSession: ChatSession = {
           id: currentSessionId,
-          title: existingIdx >= 0 && !prev[existingIdx].title.startsWith('Nuova Chat') && prev[existingIdx].title !== title ? prev[existingIdx].title : title,
+          title,
           messages,
           timestamp: Date.now(),
           fileNames: files.map(f => f.name)
         };
-
+        
+        let newSessions;
         if (existingIdx >= 0) {
-          const newSessions = [...prev];
+          newSessions = [...prev];
           newSessions[existingIdx] = updatedSession;
-          return newSessions;
         } else {
-          return [updatedSession, ...prev];
+          newSessions = [updatedSession, ...prev];
         }
+        localStorage.setItem('pdf_master_sessions', JSON.stringify(newSessions));
+        return newSessions;
       });
     }
     scrollToBottom();
-  }, [messages]);
+  }, [messages, currentSessionId, files]);
 
   const handleFilesSelected = async (newFiles: File[]) => {
     const pdfFiles = newFiles.filter(f => f.type === 'application/pdf');
@@ -215,19 +221,23 @@ export const ProcessView: React.FC = () => {
   const saveAsPreset = () => {
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
     if (!lastUserMsg) return;
+    setNewPresetName('Analisi Personalizzata');
+    setShowPresetModal(true);
+  };
 
-    const name = window.prompt('Inserisci un nome per questo preset:', 'Analisi Personalizzata');
-    if (name) {
-      const newPreset: PromptPreset = {
-        id: crypto.randomUUID(),
-        name,
-        prompt: lastUserMsg.text
-      };
-      const updatedPresets = [...presets, newPreset];
-      setPresets(updatedPresets);
-      localStorage.setItem('pdf_master_presets', JSON.stringify(updatedPresets));
-      alert('Preset salvato con successo!');
-    }
+  const confirmSavePreset = () => {
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    if (!lastUserMsg || !newPresetName.trim()) return;
+
+    const newPreset: PromptPreset = {
+      id: crypto.randomUUID(),
+      name: newPresetName.trim(),
+      prompt: lastUserMsg.text
+    };
+    const updatedPresets = [...presets, newPreset];
+    setPresets(updatedPresets);
+    localStorage.setItem('pdf_master_presets', JSON.stringify(updatedPresets));
+    setShowPresetModal(false);
   };
 
   const deletePreset = (id: string, e: React.MouseEvent) => {
@@ -247,36 +257,35 @@ export const ProcessView: React.FC = () => {
       // Create a temporary container for the PDF export
       const exportContainer = document.createElement('div');
       exportContainer.style.position = 'absolute';
-      exportContainer.style.left = '-9999px';
+      exportContainer.style.left = '0';
       exportContainer.style.top = '0';
-      exportContainer.style.width = '800px'; // Standard width for A4
+      exportContainer.style.width = '210mm'; // A4 width
+      exportContainer.style.zIndex = '-1000';
       exportContainer.style.backgroundColor = 'white';
-      exportContainer.style.padding = '40px';
+      exportContainer.style.padding = '20mm';
+      exportContainer.style.opacity = '1';
       exportContainer.className = 'pdf-export-container';
       
       // Add a header to the PDF
       const header = document.createElement('div');
       header.innerHTML = `
-        <div style="border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px;">
-          <h1 style="color: #1e293b; margin: 0; font-size: 24px;">${specificMessage ? 'Risposta AI - Report' : 'Report Analisi Documenti'}</h1>
-          <p style="color: #64748b; margin: 5px 0 0 0; font-size: 14px;">Generato il: ${new Date().toLocaleString()}</p>
-          ${files.length > 0 ? `<p style="color: #64748b; margin: 2px 0 0 0; font-size: 12px;">File analizzati: ${files.map(f => f.name).join(', ')}</p>` : ''}
+        <div style="border-bottom: 2px solid #4f46e5; padding-bottom: 15px; margin-bottom: 25px; font-family: sans-serif;">
+          <h1 style="color: #1e293b; margin: 0; font-size: 22px;">${specificMessage ? 'Risposta AI - Report' : 'Report Analisi Documenti'}</h1>
+          <p style="color: #64748b; margin: 5px 0 0 0; font-size: 12px;">Generato il: ${new Date().toLocaleString()}</p>
+          ${files.length > 0 ? `<p style="color: #64748b; margin: 2px 0 0 0; font-size: 10px;">File analizzati: ${files.map(f => f.name).join(', ')}</p>` : ''}
         </div>
       `;
       exportContainer.appendChild(header);
 
       if (specificMessage) {
-        // Export only the specific message
         const messageDiv = document.createElement('div');
         messageDiv.className = 'markdown-body';
-        messageDiv.style.padding = '20px';
+        messageDiv.style.padding = '15px';
         messageDiv.style.border = '1px solid #e2e8f0';
-        messageDiv.style.borderRadius = '12px';
+        messageDiv.style.borderRadius = '10px';
         messageDiv.style.backgroundColor = '#f8fafc';
+        messageDiv.style.fontSize = '12px';
         
-        // We need to render the markdown for the specific message
-        // Since we are in React, we can't easily use the component here, 
-        // so we'll clone the specific message from the DOM if possible
         const allMessages = targetElement.querySelectorAll('.animate-in');
         const msgIndex = messages.indexOf(specificMessage);
         if (msgIndex !== -1 && allMessages[msgIndex]) {
@@ -291,29 +300,32 @@ export const ProcessView: React.FC = () => {
         }
         exportContainer.appendChild(messageDiv);
       } else {
-        // Clone the chat messages but style them for a document
         const messagesClone = targetElement.cloneNode(true) as HTMLElement;
         messagesClone.style.height = 'auto';
         messagesClone.style.overflow = 'visible';
         messagesClone.style.padding = '0';
         
-        // Remove avatars and user bubbles styling for a cleaner report
-        const avatars = messagesClone.querySelectorAll('.w-10.h-10');
+        const avatars = messagesClone.querySelectorAll('.w-10.h-10, .w-8.h-8');
         avatars.forEach((a: any) => a.remove());
 
-        const bubbles = messagesClone.querySelectorAll('.rounded-3xl');
+        const bubbles = messagesClone.querySelectorAll('.rounded-3xl, .rounded-2xl');
         bubbles.forEach((b: any) => {
-          b.style.boxShadow = 'none';
-          b.style.border = '1px solid #e2e8f0';
-          b.style.borderRadius = '8px';
-          b.style.marginBottom = '20px';
-          b.style.pageBreakInside = 'avoid'; // Prevent breaking inside a message bubble
+          const bubble = b as HTMLElement;
+          bubble.style.boxShadow = 'none';
+          bubble.style.border = '1px solid #e2e8f0';
+          bubble.style.borderRadius = '6px';
+          bubble.style.marginBottom = '15px';
+          bubble.style.padding = '15px';
+          bubble.style.pageBreakInside = 'avoid';
+          bubble.style.fontSize = '12px';
+          bubble.style.width = '100%';
+          bubble.style.maxWidth = '100%';
           
-          if (b.classList.contains('bg-primary-600')) {
-            b.style.backgroundColor = '#f8fafc';
-            b.style.color = '#1e293b';
-            b.style.borderColor = '#cbd5e1';
-            const text = b.querySelector('.text-white');
+          if (bubble.classList.contains('bg-primary-600')) {
+            bubble.style.backgroundColor = '#f1f5f9';
+            bubble.style.color = '#1e293b';
+            bubble.style.borderColor = '#cbd5e1';
+            const text = bubble.querySelector('.text-white') as HTMLElement;
             if (text) text.style.color = '#1e293b';
           }
         });
@@ -323,19 +335,19 @@ export const ProcessView: React.FC = () => {
 
       document.body.appendChild(exportContainer);
 
-      // Wait a bit for images and styles to be fully applied
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Wait for rendering
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       const pdf = new jsPDF('p', 'mm', 'a4');
+      const session = sessions.find(s => s.id === currentSessionId);
+      const fileName = specificMessage 
+        ? `Risposta_AI_${new Date().getTime()}.pdf` 
+        : `${session?.title.replace(/[^a-z0-9]/gi, '_') || 'Report'}_${new Date().getTime()}.pdf`;
+
       const pdfWidth = pdf.internal.pageSize.getWidth();
       
-      // Use jspdf's html method for better quality and selectable text
       await pdf.html(exportContainer, {
         callback: (doc) => {
-          const session = sessions.find(s => s.id === currentSessionId);
-          const fileName = specificMessage 
-            ? `Risposta_AI_${new Date().getTime()}.pdf` 
-            : `${session?.title.replace(/[^a-z0-9]/gi, '_') || 'Report'}_${new Date().getTime()}.pdf`;
           doc.save(fileName);
           setStatus({ isProcessing: false, message: '', error: null });
           if (document.body.contains(exportContainer)) {
@@ -351,14 +363,13 @@ export const ProcessView: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       setStatus({ isProcessing: false, message: '', error: `Errore durante l'esportazione: ${err.message}` });
-      // Cleanup if error
       const container = document.querySelector('.pdf-export-container');
       if (container) document.body.removeChild(container);
     }
   };
 
   return (
-    <div className="flex h-[80vh] bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden relative">
+    <div className="flex h-[calc(100vh-100px)] bg-slate-100/30 rounded-3xl border border-slate-200 shadow-xl overflow-hidden relative">
       {/* Sidebar */}
       <div className={`
         ${showSidebar ? 'w-72' : 'w-0'} 
@@ -457,15 +468,19 @@ export const ProcessView: React.FC = () => {
             {files.length > 0 && messages.length > 0 && (
               <button 
                 onClick={() => exportToPdf()} 
-                className="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all text-xs font-bold shadow-sm"
-                title="Esporta l'intera conversazione in PDF"
+                className="flex items-center space-x-2 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all text-xs font-bold shadow-sm border border-indigo-500"
+                title="Esporta conversazione"
               >
-                <Download size={16} />
-                <span className="hidden sm:inline">Esporta Report</span>
+                <Download size={14} />
+                <span className="hidden md:inline">Esporta Report</span>
               </button>
             )}
             {files.length > 0 && (
-              <button onClick={saveAsPreset} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Salva come Preset">
+              <button 
+                onClick={saveAsPreset} 
+                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-200" 
+                title="Salva come preset rapido"
+              >
                 <Save size={18} />
               </button>
             )}
@@ -481,10 +496,10 @@ export const ProcessView: React.FC = () => {
         </div>
 
         {/* Chat Content */}
-        <div className="flex-1 overflow-hidden relative flex flex-col">
+        <div className="flex-1 overflow-hidden relative flex flex-col bg-slate-50/50">
           {files.length === 0 && messages.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-6">
-              <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center text-indigo-600">
+              <div className="w-20 h-20 bg-white rounded-3xl shadow-sm flex items-center justify-center text-indigo-500">
                 <FileSearch size={40} />
               </div>
               <div className="max-w-md">
@@ -495,27 +510,31 @@ export const ProcessView: React.FC = () => {
             </div>
           ) : (
             <>
-              <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
+              <div 
+                ref={chatContainerRef} 
+                className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth custom-scrollbar"
+                style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}
+              >
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4`}>
-                    <div className={`flex max-w-[80%] space-x-4 ${msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`}>
-                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-primary-600 text-white' : 'bg-indigo-100 text-indigo-600'}`}>
-                        {msg.role === 'user' ? <User size={20} /> : <Bot size={20} />}
+                    <div className={`flex max-w-[85%] space-x-3 ${msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`}>
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-primary-600 text-white' : 'bg-indigo-100 text-indigo-600'}`}>
+                        {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                       </div>
-                      <div className={`p-5 rounded-3xl shadow-sm relative group/msg ${msg.role === 'user' ? 'bg-primary-600 text-white rounded-tr-none' : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none'}`}>
+                      <div className={`p-4 rounded-2xl shadow-sm relative group/msg ${msg.role === 'user' ? 'bg-primary-600 text-white rounded-tr-none' : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'}`}>
                         <div className="prose prose-sm max-w-none">
                           <div className={msg.role === 'user' ? 'text-white' : 'markdown-body'}>
                             <Markdown remarkPlugins={[remarkGfm]}>{msg.text}</Markdown>
                           </div>
                         </div>
                         {msg.role === 'model' && (
-                          <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-end">
+                          <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
                             <button 
                               onClick={() => exportToPdf(msg)}
-                              className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm text-indigo-600 hover:bg-indigo-50 transition-all text-xs font-bold"
-                              title="Esporta solo questa risposta in PDF"
+                              className="flex items-center space-x-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-indigo-600 hover:bg-indigo-100 transition-all text-[10px] font-bold"
+                              title="Esporta questa risposta"
                             >
-                              <Download size={14} />
+                              <Download size={12} />
                               <span>Esporta Risposta</span>
                             </button>
                           </div>
@@ -525,21 +544,20 @@ export const ProcessView: React.FC = () => {
                   </div>
                 ))}
                 {status.isProcessing && (
-                  <div className="flex justify-start animate-pulse">
-                    <div className="flex space-x-4">
-                      <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-400 flex items-center justify-center">
-                        <Loader2 size={20} className="animate-spin" />
+                  <div className="flex justify-start animate-in fade-in duration-300">
+                    <div className="flex space-x-3">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center animate-pulse">
+                        <Bot size={16} />
                       </div>
-                      <div className="bg-slate-50 border border-slate-100 text-slate-400 p-4 rounded-3xl rounded-tl-none text-sm italic">
-                        {status.message || 'L\'AI sta pensando...'}
+                      <div className="bg-white border border-slate-100 p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center space-x-3">
+                        <Loader2 size={16} className="animate-spin text-indigo-600" />
+                        <span className="text-sm text-slate-500">{status.message || 'L\'AI sta pensando...'}</span>
                       </div>
                     </div>
                   </div>
                 )}
                 <div ref={chatEndRef} />
               </div>
-
-              {/* Action Buttons Overlay removed - moved to header */}
             </>
           )}
         </div>
@@ -589,6 +607,43 @@ export const ProcessView: React.FC = () => {
           <button onClick={() => setStatus({ ...status, error: null })} className="p-1 hover:bg-white/20 rounded-lg">
             <X size={16} />
           </button>
+        </div>
+      )}
+      {/* Preset Modal */}
+      {showPresetModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-100">
+              <h3 className="text-xl font-bold text-slate-800">Salva come Preset</h3>
+              <p className="text-sm text-slate-500 mt-1">Dai un nome a questa richiesta per riutilizzarla velocemente in futuro.</p>
+            </div>
+            <div className="p-6">
+              <label className="block text-sm font-bold text-slate-700 mb-2">Nome Preset</label>
+              <input 
+                type="text" 
+                value={newPresetName}
+                onChange={(e) => setNewPresetName(e.target.value)}
+                placeholder="es. Analisi Carburanti Mensile"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                autoFocus
+              />
+            </div>
+            <div className="p-6 bg-slate-50 rounded-b-2xl flex justify-end space-x-3">
+              <button 
+                onClick={() => setShowPresetModal(false)}
+                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Annulla
+              </button>
+              <button 
+                onClick={confirmSavePreset}
+                disabled={!newPresetName.trim()}
+                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Salva Preset
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

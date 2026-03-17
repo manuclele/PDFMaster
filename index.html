@@ -55,18 +55,54 @@
       .markdown-body tr:nth-child(even) {
         background-color: #f8fafc;
       }
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
       .pdf-export-container {
         font-family: 'Inter', sans-serif;
         color: #1e293b;
-        line-height: 1.5;
+        line-height: 1.6;
+        padding: 40px;
+        background: white;
       }
       .pdf-export-container h1, .pdf-export-container h2, .pdf-export-container h3 {
         color: #0f172a;
         margin-top: 1.5rem;
         margin-bottom: 0.75rem;
+        font-weight: 700;
       }
       .pdf-export-container .markdown-body {
         margin-bottom: 2rem;
+        font-size: 11pt;
+      }
+      .pdf-export-container table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 1.5rem;
+        page-break-inside: auto;
+      }
+      .pdf-export-container tr {
+        page-break-inside: avoid;
+      }
+      .pdf-export-container th, .pdf-export-container td {
+        border: 1px solid #e2e8f0;
+        padding: 8px 12px;
+        text-align: left;
+      }
+      .pdf-export-container th {
+        background-color: #f8fafc;
+        font-weight: 600;
+        color: #475569;
       }
     </style>
   </head>
