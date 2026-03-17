@@ -5,9 +5,10 @@ import { Dropzone } from './components/Dropzone';
 import { FileGrid } from './components/FileGrid';
 import { PerspectiveEditor } from './components/PerspectiveEditor';
 import { SplitView } from './components/SplitView';
+import { ProcessView } from './components/ProcessView';
 import { warpPerspective } from './utils/perspectiveUtils';
 import { Point } from './types';
-import { Layers, FileStack, ArrowRight, Download, RefreshCw, AlertCircle, Edit3 } from 'lucide-react';
+import { Layers, FileStack, ArrowRight, Download, RefreshCw, AlertCircle, Edit3, FileSearch, Scissors, Combine } from 'lucide-react';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<UploadedFile[]>([]);
@@ -236,26 +237,39 @@ const App: React.FC = () => {
             <span className="text-xl font-bold text-slate-800 tracking-tight">PDF Master</span>
           </div>
           <div className="flex items-center space-x-4">
-            <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg">
+            <div className="flex space-x-1 bg-slate-100 p-1 rounded-xl">
               <button
                 onClick={() => setViewMode('merge')}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                className={`flex items-center space-x-2 px-4 py-1.5 text-sm font-bold rounded-lg transition-all ${
                   viewMode === 'merge' 
                     ? 'bg-white text-primary-600 shadow-sm' 
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                Merge
+                <Combine size={16} />
+                <span className="hidden sm:inline">Unisci</span>
               </button>
               <button
                 onClick={() => setViewMode('split')}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                className={`flex items-center space-x-2 px-4 py-1.5 text-sm font-bold rounded-lg transition-all ${
                   viewMode === 'split' 
                     ? 'bg-white text-primary-600 shadow-sm' 
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                Split
+                <Scissors size={16} />
+                <span className="hidden sm:inline">Dividi</span>
+              </button>
+              <button
+                onClick={() => setViewMode('process')}
+                className={`flex items-center space-x-2 px-4 py-1.5 text-sm font-bold rounded-lg transition-all ${
+                  viewMode === 'process' 
+                    ? 'bg-white text-primary-600 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <FileSearch size={16} />
+                <span className="hidden sm:inline">Elabora</span>
               </button>
             </div>
             
@@ -277,12 +291,14 @@ const App: React.FC = () => {
         {/* Header Section */}
         <div className="text-center mb-10">
           <h1 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            {viewMode === 'merge' ? 'Merge PDF Files' : 'AI Smart Split'}
+            {viewMode === 'merge' ? 'Unisci PDF' : viewMode === 'split' ? 'Divisione Intelligente' : 'Elabora Documenti'}
           </h1>
           <p className="text-slate-500 text-lg max-w-2xl mx-auto">
             {viewMode === 'merge' 
-              ? 'Combine multiple PDFs into one unified document. Drag and drop your files, reorder them, and click merge. Secure and client-side.'
-              : 'Upload a large PDF (like tax returns for multiple employees) and let AI automatically split and name them for you.'}
+              ? 'Combina più PDF in un unico documento. Trascina i file, riordinali e uniscili in un istante.'
+              : viewMode === 'split'
+              ? 'Carica un PDF multi-pagina e lascia che l\'AI lo divida e lo nomini automaticamente per te.'
+              : 'Chiedi all\'AI di analizzare i tuoi documenti, fare calcoli o estrarre riepiloghi personalizzati.'}
           </p>
         </div>
 
@@ -369,8 +385,10 @@ const App: React.FC = () => {
                 </div>
               )}
             </>
-          ) : (
+          ) : viewMode === 'split' ? (
             <SplitView />
+          ) : (
+            <ProcessView />
           )}
         </div>
       </main>

@@ -122,3 +122,44 @@ export async function explainSplitLogic(pagesText: { page: number, text: string 
 
   return response.text || 'Non è stato possibile generare una spiegazione.';
 }
+
+export async function chatWithPdf(pagesText: { page: number, text: string }[], userMessage: string, chatHistory: { role: 'user' | 'model', text: string }[]): Promise<string> {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error("API_KEY_MISSING: La chiave API di Gemini non è configurata.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+  
+  // Prepare context from PDF text
+  const pdfContext = pagesText.map(p => `[Pagina ${p.page}]\n${p.text}`).join('\n\n');
+  
+  const systemInstruction = `
+    Sei un assistente esperto nell'analisi di documenti PDF. 
+    Ti viene fornito il testo estratto da un documento. 
+    Il tuo compito è rispondere alle domande dell'utente basandoti esclusivamente sul testo fornito.
+    Se l'utente chiede calcoli (es. somme di litri o euro), falli accuratamente estraendo i dati dal testo.
+    Se i dati non sono presenti, dillo chiaramente.
+    Rispondi in modo professionale e strutturato, usando Markdown se necessario (tabelle, grassetto, liste).
+    
+    TESTO DEL DOCUMENTO:
+    ${pdfContext}
+  `;
+
+  const chat = ai.chats.create({
+    model: "gemini-3-flash-preview",
+    config: {
+      systemInstruction: systemInstruction,
+    },
+    history: chatHistory.map(h => ({
+      role: h.role,
+      parts: [{ text: h.text }]
+    }))
+  });
+
+  const response = await chat.sendMessage({
+    message: userMessage
+  });
+
+  return response.text || "Non sono riuscito a generare una risposta.";
+}

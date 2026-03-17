@@ -23,4 +23,4 @@ export interface ProcessingState {
   error: string | null;
 }
 
-export type ViewMode = 'merge' | 'split';
+export type ViewMode = 'merge' | 'split' | 'process';
