@@ -289,17 +289,17 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
         {/* Header Section */}
-        <div className="text-center mb-10">
-          <h1 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
+        <div className={`text-center ${viewMode === 'process' ? 'mb-4' : 'mb-10'}`}>
+          <h1 className={`${viewMode === 'process' ? 'text-xl' : 'text-3xl sm:text-4xl'} font-bold text-slate-800 mb-2`}>
             {viewMode === 'merge' ? 'Unisci PDF' : viewMode === 'split' ? 'Divisione Intelligente' : 'Elabora Documenti'}
           </h1>
-          <p className="text-slate-500 text-lg max-w-2xl mx-auto">
-            {viewMode === 'merge' 
-              ? 'Combina più PDF in un unico documento. Trascina i file, riordinali e uniscili in un istante.'
-              : viewMode === 'split'
-              ? 'Carica un PDF multi-pagina e lascia che l\'AI lo divida e lo nomini automaticamente per te.'
-              : 'Chiedi all\'AI di analizzare i tuoi documenti, fare calcoli o estrarre riepiloghi personalizzati.'}
-          </p>
+          {viewMode !== 'process' && (
+            <p className="text-slate-500 text-lg max-w-2xl mx-auto">
+              {viewMode === 'merge' 
+                ? 'Combina più PDF in un unico documento. Trascina i file, riordinali e uniscili in un istante.'
+                : 'Carica un PDF multi-pagina e lascia che l\'AI lo divida e lo nomini automaticamente per te.'}
+            </p>
+          )}
         </div>
 
         {/* Action Area */}

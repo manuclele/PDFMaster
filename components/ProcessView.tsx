@@ -251,92 +251,114 @@ export const ProcessView: React.FC = () => {
     const targetElement = chatContainerRef.current;
     if (!targetElement || messages.length === 0) return;
     
-    setStatus({ isProcessing: true, message: 'Preparazione report PDF...', error: null });
+    setStatus({ isProcessing: true, message: 'Preparazione report PDF professionale...', error: null });
     
     try {
       // Create a temporary container for the PDF export
       const exportContainer = document.createElement('div');
-      exportContainer.style.position = 'absolute';
-      exportContainer.style.left = '0';
-      exportContainer.style.top = '0';
-      exportContainer.style.width = '210mm'; // A4 width
-      exportContainer.style.zIndex = '-1000';
-      exportContainer.style.backgroundColor = 'white';
-      exportContainer.style.padding = '20mm';
-      exportContainer.style.opacity = '1';
       exportContainer.className = 'pdf-export-container';
+      exportContainer.style.position = 'absolute';
+      exportContainer.style.left = '-9999px';
+      exportContainer.style.top = '0';
+      exportContainer.style.width = '190mm'; // Standard content width for A4
+      exportContainer.style.backgroundColor = 'white';
+      exportContainer.style.padding = '10mm';
       
-      // Add a header to the PDF
+      // Add a professional header
       const header = document.createElement('div');
+      header.style.borderBottom = '1px solid #000';
+      header.style.marginBottom = '30px';
+      header.style.paddingBottom = '10px';
       header.innerHTML = `
-        <div style="border-bottom: 2px solid #4f46e5; padding-bottom: 15px; margin-bottom: 25px; font-family: sans-serif;">
-          <h1 style="color: #1e293b; margin: 0; font-size: 22px;">${specificMessage ? 'Risposta AI - Report' : 'Report Analisi Documenti'}</h1>
-          <p style="color: #64748b; margin: 5px 0 0 0; font-size: 12px;">Generato il: ${new Date().toLocaleString()}</p>
-          ${files.length > 0 ? `<p style="color: #64748b; margin: 2px 0 0 0; font-size: 10px;">File analizzati: ${files.map(f => f.name).join(', ')}</p>` : ''}
+        <div style="display: flex; justify-between; align-items: center;">
+          <h1 style="margin: 0; font-size: 24pt; font-weight: bold; color: #000;">REPORT ANALISI</h1>
+          <div style="text-align: right; font-size: 10pt; color: #666;">
+            <div>Data: ${new Date().toLocaleDateString('it-IT')}</div>
+            <div>Ora: ${new Date().toLocaleTimeString('it-IT')}</div>
+          </div>
+        </div>
+        <div style="margin-top: 10px; font-size: 9pt; color: #444;">
+          ${files.length > 0 ? `<strong>Documenti sorgente:</strong> ${files.map(f => f.name).join(', ')}` : ''}
         </div>
       `;
       exportContainer.appendChild(header);
 
+      const contentWrapper = document.createElement('div');
+      
       if (specificMessage) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'markdown-body';
-        messageDiv.style.padding = '15px';
-        messageDiv.style.border = '1px solid #e2e8f0';
-        messageDiv.style.borderRadius = '10px';
-        messageDiv.style.backgroundColor = '#f8fafc';
-        messageDiv.style.fontSize = '12px';
+        // Export only one message
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'markdown-body';
         
-        const allMessages = targetElement.querySelectorAll('.animate-in');
-        const msgIndex = messages.indexOf(specificMessage);
-        if (msgIndex !== -1 && allMessages[msgIndex]) {
-          const clonedMsg = allMessages[msgIndex].querySelector('.markdown-body')?.cloneNode(true) as HTMLElement;
-          if (clonedMsg) {
-            messageDiv.appendChild(clonedMsg);
-          } else {
-            messageDiv.innerText = specificMessage.text;
-          }
+        // Find the original markdown content to avoid cloning UI elements
+        const originalMsgEl = targetElement.querySelectorAll('.animate-in')[messages.indexOf(specificMessage)];
+        const markdownContent = originalMsgEl?.querySelector('.markdown-body')?.cloneNode(true) as HTMLElement;
+        
+        if (markdownContent) {
+          msgDiv.appendChild(markdownContent);
         } else {
-          messageDiv.innerText = specificMessage.text;
+          msgDiv.innerText = specificMessage.text;
         }
-        exportContainer.appendChild(messageDiv);
+        contentWrapper.appendChild(msgDiv);
       } else {
-        const messagesClone = targetElement.cloneNode(true) as HTMLElement;
-        messagesClone.style.height = 'auto';
-        messagesClone.style.overflow = 'visible';
-        messagesClone.style.padding = '0';
-        
-        const avatars = messagesClone.querySelectorAll('.w-10.h-10, .w-8.h-8');
-        avatars.forEach((a: any) => a.remove());
-
-        const bubbles = messagesClone.querySelectorAll('.rounded-3xl, .rounded-2xl');
-        bubbles.forEach((b: any) => {
-          const bubble = b as HTMLElement;
-          bubble.style.boxShadow = 'none';
-          bubble.style.border = '1px solid #e2e8f0';
-          bubble.style.borderRadius = '6px';
-          bubble.style.marginBottom = '15px';
-          bubble.style.padding = '15px';
-          bubble.style.pageBreakInside = 'avoid';
-          bubble.style.fontSize = '12px';
-          bubble.style.width = '100%';
-          bubble.style.maxWidth = '100%';
+        // Export full conversation
+        messages.forEach((msg, idx) => {
+          const section = document.createElement('div');
+          section.style.marginBottom = '25px';
+          section.style.pageBreakInside = 'avoid';
           
-          if (bubble.classList.contains('bg-primary-600')) {
-            bubble.style.backgroundColor = '#f1f5f9';
-            bubble.style.color = '#1e293b';
-            bubble.style.borderColor = '#cbd5e1';
-            const text = bubble.querySelector('.text-white') as HTMLElement;
-            if (text) text.style.color = '#1e293b';
+          const label = document.createElement('div');
+          label.style.fontSize = '8pt';
+          label.style.fontWeight = 'bold';
+          label.style.textTransform = 'uppercase';
+          label.style.color = '#888';
+          label.style.marginBottom = '5px';
+          label.innerText = msg.role === 'user' ? 'UTENTE' : 'ASSISTENTE AI';
+          section.appendChild(label);
+          
+          const msgDiv = document.createElement('div');
+          msgDiv.className = 'markdown-body';
+          
+          const originalMsgEl = targetElement.querySelectorAll('.animate-in')[idx];
+          const markdownContent = originalMsgEl?.querySelector('.markdown-body')?.cloneNode(true) as HTMLElement;
+          
+          if (markdownContent) {
+            msgDiv.appendChild(markdownContent);
+          } else {
+            msgDiv.innerText = msg.text;
           }
+          section.appendChild(msgDiv);
+          contentWrapper.appendChild(section);
         });
-
-        exportContainer.appendChild(messagesClone);
       }
 
+      // Apply strict table styles to the export container
+      const tables = contentWrapper.querySelectorAll('table');
+      tables.forEach((table: any) => {
+        table.style.width = '100%';
+        table.style.borderCollapse = 'collapse';
+        table.style.marginBottom = '20px';
+        table.style.pageBreakInside = 'avoid'; // Prevent table from splitting
+        
+        const cells = table.querySelectorAll('th, td');
+        cells.forEach((cell: any) => {
+          cell.style.border = '1px solid #ccc';
+          cell.style.padding = '8px';
+          cell.style.fontSize = '10pt';
+        });
+        
+        const headers = table.querySelectorAll('th');
+        headers.forEach((h: any) => {
+          h.style.backgroundColor = '#f0f0f0';
+          h.style.fontWeight = 'bold';
+        });
+      });
+
+      exportContainer.appendChild(contentWrapper);
       document.body.appendChild(exportContainer);
 
-      // Wait for rendering
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Wait for any potential rendering
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       const pdf = new jsPDF('p', 'mm', 'a4');
       const session = sessions.find(s => s.id === currentSessionId);
@@ -344,8 +366,6 @@ export const ProcessView: React.FC = () => {
         ? `Risposta_AI_${new Date().getTime()}.pdf` 
         : `${session?.title.replace(/[^a-z0-9]/gi, '_') || 'Report'}_${new Date().getTime()}.pdf`;
 
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      
       await pdf.html(exportContainer, {
         callback: (doc) => {
           doc.save(fileName);
@@ -356,20 +376,20 @@ export const ProcessView: React.FC = () => {
         },
         x: 10,
         y: 10,
-        width: pdfWidth - 20,
+        width: 190,
         windowWidth: 800,
         autoPaging: 'text'
       });
     } catch (err: any) {
       console.error(err);
-      setStatus({ isProcessing: false, message: '', error: `Errore durante l'esportazione: ${err.message}` });
+      setStatus({ isProcessing: false, message: '', error: `Errore export: ${err.message}` });
       const container = document.querySelector('.pdf-export-container');
       if (container) document.body.removeChild(container);
     }
   };
 
   return (
-    <div className="flex h-[calc(100vh-100px)] bg-slate-100/30 rounded-3xl border border-slate-200 shadow-xl overflow-hidden relative">
+    <div className="flex h-[calc(100vh-140px)] bg-slate-100/30 rounded-3xl border border-slate-200 shadow-xl overflow-hidden relative">
       {/* Sidebar */}
       <div className={`
         ${showSidebar ? 'w-72' : 'w-0'} 
