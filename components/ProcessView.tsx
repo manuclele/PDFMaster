@@ -22,8 +22,8 @@ interface Message {
 }
 
 export const ProcessView: React.FC = () => {
-  const [file, setFile] = useState<File | null>(null);
-  const [pagesText, setPagesText] = useState<{ page: number, text: string }[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [pagesText, setPagesText] = useState<{ page: number, text: string, fileName: string }[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<ProcessingState>({
@@ -43,25 +43,35 @@ export const ProcessView: React.FC = () => {
   }, [messages]);
 
   const handleFilesSelected = async (newFiles: File[]) => {
-    const pdfFile = newFiles.find(f => f.type === 'application/pdf');
-    if (!pdfFile) {
-      setStatus({ ...status, error: 'Per favore seleziona un file PDF.' });
+    const pdfFiles = newFiles.filter(f => f.type === 'application/pdf');
+    if (pdfFiles.length === 0) {
+      setStatus({ ...status, error: 'Per favore seleziona almeno un file PDF.' });
       return;
     }
     
-    setFile(pdfFile);
-    setStatus({ isProcessing: true, message: 'Lettura del documento in corso...', error: null });
+    setFiles(prev => [...prev, ...pdfFiles]);
+    setStatus({ isProcessing: true, message: `Lettura di ${pdfFiles.length} documenti in corso...`, error: null });
 
     try {
-      const extractedText = await extractTextFromPdf(pdfFile);
-      setPagesText(extractedText);
+      const allExtractedText: { page: number, text: string, fileName: string }[] = [];
+      
+      for (const pdfFile of pdfFiles) {
+        const extractedText = await extractTextFromPdf(pdfFile);
+        allExtractedText.push(...extractedText.map(p => ({ ...p, fileName: pdfFile.name })));
+      }
+
+      setPagesText(prev => [...prev, ...allExtractedText]);
       setStatus({ isProcessing: false, message: '', error: null });
       
-      // Initial greeting
-      setMessages([
+      // Initial greeting or update message
+      const fileNames = pdfFiles.map(f => `"${f.name}"`).join(', ');
+      setMessages(prev => [
+        ...prev,
         { 
           role: 'model', 
-          text: `Ho letto il documento "${pdfFile.name}" (${extractedText.length} pagine). Cosa desideri analizzare? Posso fare calcoli, riassunti o estrarre dati specifici.` 
+          text: prev.length === 0 
+            ? `Ho letto ${pdfFiles.length} documenti: ${fileNames}. Cosa desideri analizzare? Posso fare calcoli incrociati, riassunti o estrarre dati specifici da tutti i file.`
+            : `Ho aggiunto ${pdfFiles.length} nuovi documenti: ${fileNames}. Ora posso analizzarli insieme ai precedenti.`
         }
       ]);
     } catch (err: any) {
@@ -72,7 +82,7 @@ export const ProcessView: React.FC = () => {
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim() || status.isProcessing || !file) return;
+    if (!input.trim() || status.isProcessing || files.length === 0) return;
 
     const userMessage = input.trim();
     setInput('');
@@ -80,7 +90,9 @@ export const ProcessView: React.FC = () => {
     setStatus({ isProcessing: true, message: 'L\'AI sta elaborando...', error: null });
 
     try {
-      const response = await chatWithPdf(pagesText, userMessage, messages);
+      // We need to pass the file name context to the chat service
+      const contextText = pagesText.map(p => ({ page: p.page, text: `[File: ${p.fileName}, Pagina: ${p.page}]\n${p.text}` }));
+      const response = await chatWithPdf(contextText, userMessage, messages);
       setMessages(prev => [...prev, { role: 'model', text: response }]);
       setStatus({ isProcessing: false, message: '', error: null });
     } catch (err: any) {
@@ -89,8 +101,17 @@ export const ProcessView: React.FC = () => {
     }
   };
 
+  const removeFile = (index: number) => {
+    const fileName = files[index].name;
+    setFiles(prev => prev.filter((_, i) => i !== index));
+    setPagesText(prev => prev.filter(p => p.fileName !== fileName));
+    if (files.length === 1) {
+      reset();
+    }
+  };
+
   const reset = () => {
-    setFile(null);
+    setFiles([]);
     setPagesText([]);
     setMessages([]);
     setInput('');
@@ -99,34 +120,62 @@ export const ProcessView: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {!file ? (
+      {files.length === 0 ? (
         <div className="space-y-6">
           <div className="text-center space-y-2">
             <h2 className="text-3xl font-bold text-slate-800">Elabora Documenti</h2>
-            <p className="text-slate-500">Carica un PDF per analizzarlo, fare calcoli o estrarre dati con l'AI.</p>
+            <p className="text-slate-500">Carica uno o più PDF per analizzarli, fare calcoli o estrarre dati con l'AI.</p>
           </div>
           <Dropzone onFilesSelected={handleFilesSelected} />
         </div>
       ) : (
-        <div className="flex flex-col h-[70vh] bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex flex-col h-[75vh] bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {/* Header */}
           <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
+            <div className="flex items-center space-x-3 overflow-hidden">
+              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600 flex-shrink-0">
                 <FileSearch size={20} />
               </div>
-              <div>
-                <h3 className="font-bold text-slate-800 truncate max-w-[200px] sm:max-w-md">{file.name}</h3>
-                <p className="text-xs text-slate-500">{pagesText.length} pagine caricate</p>
+              <div className="overflow-hidden">
+                <h3 className="font-bold text-slate-800 truncate">
+                  {files.length} Documenti caricati
+                </h3>
+                <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar py-1">
+                  {files.map((f, i) => (
+                    <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-white border border-slate-200 text-slate-600 whitespace-nowrap">
+                      {f.name}
+                      <button onClick={() => removeFile(i)} className="ml-1 text-slate-400 hover:text-red-500">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
-            <button 
-              onClick={reset}
-              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Rimuovi file"
-            >
-              <Trash2 size={18} />
-            </button>
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={() => document.getElementById('add-more-files')?.click()}
+                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                title="Aggiungi altri file"
+              >
+                <Sparkles size={18} />
+                <input 
+                  id="add-more-files" 
+                  type="file" 
+                  multiple 
+                  accept="application/pdf" 
+                  className="hidden" 
+                  onChange={(e) => e.target.files && handleFilesSelected(Array.from(e.target.files))}
+                />
+              </button>
+              <button 
+                onClick={reset}
+                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Rimuovi tutto"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
           </div>
 
           {/* Chat Messages */}
@@ -172,7 +221,7 @@ export const ProcessView: React.FC = () => {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Chiedi all'AI di analizzare il documento..."
+                placeholder="Chiedi all'AI di analizzare i documenti..."
                 className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                 disabled={status.isProcessing}
               />
@@ -186,22 +235,22 @@ export const ProcessView: React.FC = () => {
             </form>
             <div className="mt-2 flex flex-wrap gap-2">
               <button 
-                onClick={() => setInput("Fai un riassunto dei dati principali")}
+                onClick={() => setInput("Fai un riassunto dei dati principali di tutti i file")}
                 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-primary-600 transition-colors"
               >
-                Riassunto
+                Riassunto Globale
               </button>
               <button 
-                onClick={() => setInput("Estrai tutti i totali in euro")}
+                onClick={() => setInput("Estrai tutti i totali in euro suddivisi per file")}
                 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-primary-600 transition-colors"
               >
-                Totali Euro
+                Totali per File
               </button>
               <button 
-                onClick={() => setInput("Crea una tabella con i dati estratti")}
+                onClick={() => setInput("Crea una tabella comparativa dei dati estratti")}
                 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-primary-600 transition-colors"
               >
-                Tabella Dati
+                Tabella Comparativa
               </button>
             </div>
           </div>
