@@ -406,6 +406,9 @@ export const ProcessView: React.FC = () => {
     if (error.includes('429') || error.toLowerCase().includes('quota')) {
       return "Limite messaggi raggiunto per questo modello. Ho ripristinato il modello standard per permetterti di continuare. Riprova ora.";
     }
+    if (error.includes('503') || error.toLowerCase().includes('high demand')) {
+      return "I server di Google sono temporaneamente sovraccarichi. Attendi 10 secondi e riprova a inviare il messaggio.";
+    }
     return error;
   };
 
