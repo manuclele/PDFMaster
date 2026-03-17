@@ -370,14 +370,27 @@ export const ProcessView: React.FC = () => {
       exportContainer.style.left = '50%';
       exportContainer.style.top = '50%';
       exportContainer.style.transform = 'translate(-50%, -50%)';
-      exportContainer.style.width = '210mm';
-      exportContainer.style.maxHeight = '90vh';
-      exportContainer.style.overflow = 'auto';
-      exportContainer.style.zIndex = '9999';
+      exportContainer.style.width = '800px';
+      exportContainer.style.maxHeight = 'none';
+      exportContainer.style.overflow = 'visible';
+      exportContainer.style.zIndex = '-9999';
       exportContainer.style.backgroundColor = 'white';
-      exportContainer.style.padding = '20mm';
-      exportContainer.style.boxShadow = '0 0 50px rgba(0,0,0,0.5)';
-      exportContainer.style.visibility = 'hidden'; // Hidden from user but visible to DOM
+      exportContainer.style.padding = '40px';
+      exportContainer.style.boxSizing = 'border-box';
+      exportContainer.style.visibility = 'hidden';
+      
+      // Global styles for the export container
+      const styleTag = document.createElement('style');
+      styleTag.innerHTML = `
+        .pdf-export-container * { box-sizing: border-box !important; }
+        .pdf-export-container .markdown-body { font-size: 11pt !important; line-height: 1.5 !important; }
+        .pdf-export-container table { width: 100% !important; border-collapse: collapse !important; margin: 15px 0 !important; table-layout: fixed !important; }
+        .pdf-export-container th, .pdf-export-container td { border: 1px solid #e2e8f0 !important; padding: 8px !important; word-break: break-word !important; font-size: 9pt !important; }
+        .pdf-export-container th { background-color: #f8fafc !important; }
+        .pdf-export-container pre { white-space: pre-wrap !important; word-break: break-all !important; background: #f1f5f9 !important; padding: 10px !important; border-radius: 5px !important; }
+        .pdf-export-container p, .pdf-export-container li { word-break: break-word !important; }
+      `;
+      exportContainer.appendChild(styleTag);
       
       // Add a professional header
       const header = document.createElement('div');
@@ -388,7 +401,7 @@ export const ProcessView: React.FC = () => {
       header.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <div>
-            <h1 style="margin: 0; font-size: 26pt; font-weight: 800; color: #1e293b;">REPORT ANALISI</h1>
+            <h1 style="margin: 0; font-size: 24pt; font-weight: 800; color: #1e293b;">REPORT ANALISI</h1>
             <div style="margin-top: 5px; font-size: 10pt; color: #64748b;">Documento generato tramite PDF Master AI</div>
           </div>
           <div style="text-align: right; font-size: 10pt; color: #1e293b;">
@@ -396,7 +409,7 @@ export const ProcessView: React.FC = () => {
             <div>Ora: ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</div>
           </div>
         </div>
-        <div style="margin-top: 20px; font-size: 9pt; color: #475569; line-height: 1.4;">
+        <div style="margin-top: 20px; font-size: 9pt; color: #475569; line-height: 1.4; word-break: break-all;">
           ${files.length > 0 ? `<strong>File analizzati:</strong> ${files.map(f => f.name).join(', ')}` : ''}
         </div>
       `;
@@ -499,7 +512,7 @@ export const ProcessView: React.FC = () => {
         x: 10,
         y: 10,
         width: 190,
-        windowWidth: 850,
+        windowWidth: 800,
         autoPaging: 'text'
       });
     } catch (err: any) {
