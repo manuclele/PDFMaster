@@ -23,7 +23,10 @@ import {
   Save,
   ChevronLeft,
   Menu,
-  MessageSquare
+  MessageSquare,
+  Square,
+  Copy,
+  Edit2
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -42,12 +45,14 @@ export const ProcessView: React.FC = () => {
   const [showSidebar, setShowSidebar] = useState(true);
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [newPresetName, setNewPresetName] = useState('');
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [showPresets, setShowPresets] = useState(false);
   
   const [status, setStatus] = useState<ProcessingState>({ isProcessing: false, message: '', error: null });
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -97,6 +102,7 @@ export const ProcessView: React.FC = () => {
         if (existingIdx >= 0) {
           title = prev[existingIdx].title;
         } else {
+          // Only set temporary title if it's really a new session
           const userMsg = messages.find(m => m.role === 'user');
           title = userMsg ? userMsg.text.slice(0, 30) + '...' : 'Nuova Chat';
         }
@@ -116,7 +122,6 @@ export const ProcessView: React.FC = () => {
         } else {
           newSessions = [updatedSession, ...prev];
         }
-        localStorage.setItem('pdf_master_sessions', JSON.stringify(newSessions));
         return newSessions;
       });
     }
@@ -168,22 +173,41 @@ export const ProcessView: React.FC = () => {
     setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
     setStatus({ isProcessing: true, message: 'L\'AI sta elaborando...', error: null });
 
+    // Initialize AbortController
+    abortControllerRef.current = new AbortController();
+
     try {
       const contextText = pagesText.map(p => ({ page: p.page, text: `[File: ${p.fileName}, Pagina: ${p.page}]\n${p.text}` }));
-      const response = await chatWithPdf(contextText, userMessage, messages);
+      const response = await chatWithPdf(contextText, userMessage, messages, abortControllerRef.current.signal);
       
       // Generate title if it's the first exchange
       if (messages.length === 0) {
         generateChatTitle(userMessage, response).then(title => {
-          setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, title } : s));
+          setSessions(prev => {
+            const updated = prev.map(s => s.id === currentSessionId ? { ...s, title } : s);
+            localStorage.setItem('pdf_master_sessions', JSON.stringify(updated));
+            return updated;
+          });
         });
       }
       
       setMessages(prev => [...prev, { role: 'model', text: response }]);
       setStatus({ isProcessing: false, message: '', error: null });
     } catch (err: any) {
-      console.error(err);
-      setStatus({ isProcessing: false, message: '', error: `Errore: ${err.message}` });
+      if (err.name === 'AbortError') {
+        setStatus({ isProcessing: false, message: '', error: 'Elaborazione interrotta dall\'utente.' });
+      } else {
+        console.error(err);
+        setStatus({ isProcessing: false, message: '', error: `Errore: ${err.message}` });
+      }
+    } finally {
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStopProcessing = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -222,22 +246,50 @@ export const ProcessView: React.FC = () => {
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
     if (!lastUserMsg) return;
     setNewPresetName('Analisi Personalizzata');
+    setEditingPresetId(null);
     setShowPresetModal(true);
   };
 
-  const confirmSavePreset = () => {
-    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-    if (!lastUserMsg || !newPresetName.trim()) return;
+  const openEditPreset = (preset: PromptPreset, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNewPresetName(preset.name);
+    setEditingPresetId(preset.id);
+    setShowPresetModal(true);
+  };
 
+  const duplicatePreset = (preset: PromptPreset, e: React.MouseEvent) => {
+    e.stopPropagation();
     const newPreset: PromptPreset = {
+      ...preset,
       id: crypto.randomUUID(),
-      name: newPresetName.trim(),
-      prompt: lastUserMsg.text
+      name: `${preset.name} (Copia)`
     };
     const updatedPresets = [...presets, newPreset];
     setPresets(updatedPresets);
     localStorage.setItem('pdf_master_presets', JSON.stringify(updatedPresets));
+  };
+
+  const confirmSavePreset = () => {
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    if (!newPresetName.trim()) return;
+
+    let updatedPresets;
+    if (editingPresetId) {
+      updatedPresets = presets.map(p => p.id === editingPresetId ? { ...p, name: newPresetName.trim() } : p);
+    } else {
+      if (!lastUserMsg) return;
+      const newPreset: PromptPreset = {
+        id: crypto.randomUUID(),
+        name: newPresetName.trim(),
+        prompt: lastUserMsg.text
+      };
+      updatedPresets = [...presets, newPreset];
+    }
+    
+    setPresets(updatedPresets);
+    localStorage.setItem('pdf_master_presets', JSON.stringify(updatedPresets));
     setShowPresetModal(false);
+    setEditingPresetId(null);
   };
 
   const deletePreset = (id: string, e: React.MouseEvent) => {
@@ -470,11 +522,21 @@ export const ProcessView: React.FC = () => {
           </h4>
           <div className="space-y-2">
             {presets.map(preset => (
-              <div key={preset.id} className="group flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200 hover:border-indigo-300 transition-all cursor-pointer" onClick={() => handleSendMessage(preset.prompt)}>
-                <span className="text-xs font-medium text-slate-700 truncate">{preset.name}</span>
-                <button onClick={(e) => deletePreset(preset.id, e)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-all">
-                  <X size={12} />
-                </button>
+              <div key={preset.id} className="group flex flex-col bg-white p-2 rounded-lg border border-slate-200 hover:border-indigo-300 transition-all cursor-pointer" onClick={() => handleSendMessage(preset.prompt)}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-700 truncate flex-1">{preset.name}</span>
+                  <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button onClick={(e) => duplicatePreset(preset, e)} title="Duplica" className="p-1 text-slate-400 hover:text-indigo-500">
+                      <Copy size={12} />
+                    </button>
+                    <button onClick={(e) => openEditPreset(preset, e)} title="Modifica Nome" className="p-1 text-slate-400 hover:text-indigo-500">
+                      <Edit2 size={12} />
+                    </button>
+                    <button onClick={(e) => deletePreset(preset.id, e)} title="Elimina" className="p-1 text-slate-400 hover:text-red-500">
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -542,14 +604,16 @@ export const ProcessView: React.FC = () => {
         {/* Chat Content */}
         <div className="flex-1 overflow-hidden relative flex flex-col bg-slate-50/50">
           {files.length === 0 && messages.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-6">
-              <div className="w-20 h-20 bg-white rounded-3xl shadow-sm flex items-center justify-center text-indigo-500">
-                <FileSearch size={40} />
+            <div className="flex-1 flex flex-col items-center justify-center p-4 text-center space-y-4">
+              <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-indigo-500">
+                <FileSearch size={32} />
               </div>
               <div className="max-w-md">
-                <h2 className="text-2xl font-bold text-slate-800 mb-2">Pronto ad analizzare?</h2>
-                <p className="text-slate-500 mb-8">Carica i tuoi PDF per iniziare una nuova sessione di analisi intelligente.</p>
-                <Dropzone onFilesSelected={handleFilesSelected} />
+                <h2 className="text-xl font-bold text-slate-800 mb-1">Pronto ad analizzare?</h2>
+                <p className="text-xs text-slate-500 mb-4">Carica i tuoi PDF per iniziare una nuova sessione di analisi intelligente.</p>
+                <div className="scale-90 origin-top">
+                  <Dropzone onFilesSelected={handleFilesSelected} />
+                </div>
               </div>
             </div>
           ) : (
@@ -614,7 +678,7 @@ export const ProcessView: React.FC = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={files.length > 0 ? "Chiedi all'AI di analizzare i documenti..." : "Carica dei file per iniziare..."}
-              className="w-full pl-6 pr-16 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all shadow-inner"
+              className={`w-full pl-6 ${status.isProcessing ? 'pr-32' : 'pr-16'} py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all shadow-inner`}
               disabled={status.isProcessing || files.length === 0}
             />
             <button
@@ -624,6 +688,18 @@ export const ProcessView: React.FC = () => {
             >
               <Send size={20} />
             </button>
+            
+            {status.isProcessing && (
+              <button
+                type="button"
+                onClick={handleStopProcessing}
+                className="absolute right-16 top-2 p-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 flex items-center space-x-2"
+                title="Ferma elaborazione"
+              >
+                <Square size={20} fill="currentColor" />
+                <span className="text-xs font-bold pr-1">STOP</span>
+              </button>
+            )}
           </form>
           
           {/* Quick Presets Bar */}
@@ -658,8 +734,14 @@ export const ProcessView: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in duration-200">
             <div className="p-6 border-b border-slate-100">
-              <h3 className="text-xl font-bold text-slate-800">Salva come Preset</h3>
-              <p className="text-sm text-slate-500 mt-1">Dai un nome a questa richiesta per riutilizzarla velocemente in futuro.</p>
+              <h3 className="text-xl font-bold text-slate-800">
+                {editingPresetId ? 'Modifica Preset' : 'Salva come Preset'}
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">
+                {editingPresetId 
+                  ? 'Modifica il nome del tuo preset salvato.' 
+                  : 'Dai un nome a questa richiesta per riutilizzarla velocemente in futuro.'}
+              </p>
             </div>
             <div className="p-6">
               <label className="block text-sm font-bold text-slate-700 mb-2">Nome Preset</label>

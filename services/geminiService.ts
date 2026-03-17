@@ -123,7 +123,12 @@ export async function explainSplitLogic(pagesText: { page: number, text: string 
   return response.text || 'Non è stato possibile generare una spiegazione.';
 }
 
-export async function chatWithPdf(pagesText: { page: number, text: string }[], userMessage: string, chatHistory: { role: 'user' | 'model', text: string }[]): Promise<string> {
+export async function chatWithPdf(
+  pagesText: { page: number, text: string }[], 
+  userMessage: string, 
+  chatHistory: { role: 'user' | 'model', text: string }[],
+  signal?: AbortSignal
+): Promise<string> {
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error("API_KEY_MISSING: La chiave API di Gemini non è configurata.");
@@ -157,21 +162,21 @@ export async function chatWithPdf(pagesText: { page: number, text: string }[], u
     FORMATTAZIONE: Usa SEMPRE le tabelle Markdown per mostrare dati strutturati (come elenchi di targhe, litri, euro). Non usare elenchi puntati per dati tabulari.
   `;
 
-  const chat = ai.chats.create({
+  const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
+    contents: [
+      ...chatHistory.map(h => ({
+        role: h.role,
+        parts: [{ text: h.text }]
+      })),
+      { role: 'user', parts: [{ text: userMessage }] }
+    ],
     config: {
       systemInstruction: systemInstruction,
       temperature: 0,
-    },
-    history: chatHistory.map(h => ({
-      role: h.role,
-      parts: [{ text: h.text }]
-    }))
-  });
-
-  const response = await chat.sendMessage({
-    message: userMessage
-  });
+    }
+    // @ts-ignore - signal is supported at runtime by the underlying fetch
+  }, { signal });
 
   return response.text || "Non sono riuscito a generare una risposta.";
 }
