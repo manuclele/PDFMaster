@@ -94,11 +94,12 @@ export const ProcessView: React.FC = () => {
     if (messages.length > 0) {
       setSessions(prev => {
         const existingIdx = prev.findIndex(s => s.id === currentSessionId);
-        const title = messages.find(m => m.role === 'user')?.text.slice(0, 30) + '...' || 'Nuova Chat';
+        const userMsg = messages.find(m => m.role === 'user');
+        const title = userMsg ? userMsg.text.slice(0, 30) + '...' : 'Nuova Chat';
         
         const updatedSession: ChatSession = {
           id: currentSessionId,
-          title: existingIdx >= 0 ? prev[existingIdx].title : title,
+          title: existingIdx >= 0 && prev[existingIdx].title !== 'Nuova Chat...' ? prev[existingIdx].title : title,
           messages,
           timestamp: Date.now(),
           fileNames: files.map(f => f.name)
@@ -228,13 +229,14 @@ export const ProcessView: React.FC = () => {
     localStorage.setItem('pdf_master_presets', JSON.stringify(updatedPresets));
   };
 
-  const exportToPdf = async () => {
-    if (!chatContainerRef.current || messages.length === 0) return;
+  const exportToPdf = async (specificMessage?: ChatMessage) => {
+    const targetElement = chatContainerRef.current;
+    if (!targetElement || messages.length === 0) return;
     
     setStatus({ isProcessing: true, message: 'Preparazione report PDF...', error: null });
     
     try {
-      // Create a temporary container for the PDF export to ensure full content is captured
+      // Create a temporary container for the PDF export
       const exportContainer = document.createElement('div');
       exportContainer.style.position = 'absolute';
       exportContainer.style.left = '-9999px';
@@ -248,38 +250,69 @@ export const ProcessView: React.FC = () => {
       const header = document.createElement('div');
       header.innerHTML = `
         <div style="border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px;">
-          <h1 style="color: #1e293b; margin: 0; font-size: 24px;">Report Analisi Documenti</h1>
+          <h1 style="color: #1e293b; margin: 0; font-size: 24px;">${specificMessage ? 'Risposta AI - Report' : 'Report Analisi Documenti'}</h1>
           <p style="color: #64748b; margin: 5px 0 0 0; font-size: 14px;">Generato il: ${new Date().toLocaleString()}</p>
-          <p style="color: #64748b; margin: 2px 0 0 0; font-size: 12px;">File analizzati: ${files.map(f => f.name).join(', ')}</p>
+          ${files.length > 0 ? `<p style="color: #64748b; margin: 2px 0 0 0; font-size: 12px;">File analizzati: ${files.map(f => f.name).join(', ')}</p>` : ''}
         </div>
       `;
       exportContainer.appendChild(header);
 
-      // Clone the chat messages but style them for a document
-      const messagesClone = chatContainerRef.current.cloneNode(true) as HTMLElement;
-      messagesClone.style.height = 'auto';
-      messagesClone.style.overflow = 'visible';
-      messagesClone.style.padding = '0';
-      
-      // Remove avatars and user bubbles styling for a cleaner report
-      const avatars = messagesClone.querySelectorAll('.w-10.h-10');
-      avatars.forEach((a: any) => a.remove());
-
-      const bubbles = messagesClone.querySelectorAll('.rounded-3xl');
-      bubbles.forEach((b: any) => {
-        b.style.boxShadow = 'none';
-        b.style.border = '1px solid #e2e8f0';
-        b.style.borderRadius = '8px';
-        if (b.classList.contains('bg-primary-600')) {
-          b.style.backgroundColor = '#f8fafc';
-          b.style.color = '#1e293b';
-          b.style.borderColor = '#cbd5e1';
-          const text = b.querySelector('.text-white');
-          if (text) text.style.color = '#1e293b';
+      if (specificMessage) {
+        // Export only the specific message
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'markdown-body';
+        messageDiv.style.padding = '20px';
+        messageDiv.style.border = '1px solid #e2e8f0';
+        messageDiv.style.borderRadius = '12px';
+        messageDiv.style.backgroundColor = '#f8fafc';
+        
+        // We need to render the markdown for the specific message
+        // Since we are in React, we can't easily use the component here, 
+        // so we'll clone the specific message from the DOM if possible
+        const allMessages = targetElement.querySelectorAll('.animate-in');
+        const msgIndex = messages.indexOf(specificMessage);
+        if (msgIndex !== -1 && allMessages[msgIndex]) {
+          const clonedMsg = allMessages[msgIndex].querySelector('.markdown-body')?.cloneNode(true) as HTMLElement;
+          if (clonedMsg) {
+            messageDiv.appendChild(clonedMsg);
+          } else {
+            messageDiv.innerText = specificMessage.text;
+          }
+        } else {
+          messageDiv.innerText = specificMessage.text;
         }
-      });
+        exportContainer.appendChild(messageDiv);
+      } else {
+        // Clone the chat messages but style them for a document
+        const messagesClone = targetElement.cloneNode(true) as HTMLElement;
+        messagesClone.style.height = 'auto';
+        messagesClone.style.overflow = 'visible';
+        messagesClone.style.padding = '0';
+        
+        // Remove avatars and user bubbles styling for a cleaner report
+        const avatars = messagesClone.querySelectorAll('.w-10.h-10');
+        avatars.forEach((a: any) => a.remove());
 
-      exportContainer.appendChild(messagesClone);
+        const bubbles = messagesClone.querySelectorAll('.rounded-3xl');
+        bubbles.forEach((b: any) => {
+          b.style.boxShadow = 'none';
+          b.style.border = '1px solid #e2e8f0';
+          b.style.borderRadius = '8px';
+          b.style.marginBottom = '20px';
+          b.style.pageBreakInside = 'avoid'; // Prevent breaking inside a message bubble
+          
+          if (b.classList.contains('bg-primary-600')) {
+            b.style.backgroundColor = '#f8fafc';
+            b.style.color = '#1e293b';
+            b.style.borderColor = '#cbd5e1';
+            const text = b.querySelector('.text-white');
+            if (text) text.style.color = '#1e293b';
+          }
+        });
+
+        exportContainer.appendChild(messagesClone);
+      }
+
       document.body.appendChild(exportContainer);
 
       // Wait a bit for images and styles to be fully applied
@@ -457,12 +490,21 @@ export const ProcessView: React.FC = () => {
                       <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-primary-600 text-white' : 'bg-indigo-100 text-indigo-600'}`}>
                         {msg.role === 'user' ? <User size={20} /> : <Bot size={20} />}
                       </div>
-                      <div className={`p-5 rounded-3xl shadow-sm ${msg.role === 'user' ? 'bg-primary-600 text-white rounded-tr-none' : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none'}`}>
+                      <div className={`p-5 rounded-3xl shadow-sm relative group/msg ${msg.role === 'user' ? 'bg-primary-600 text-white rounded-tr-none' : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none'}`}>
                         <div className="prose prose-sm max-w-none">
                           <div className={msg.role === 'user' ? 'text-white' : 'markdown-body'}>
                             <Markdown remarkPlugins={[remarkGfm]}>{msg.text}</Markdown>
                           </div>
                         </div>
+                        {msg.role === 'model' && (
+                          <button 
+                            onClick={() => exportToPdf(msg)}
+                            className="absolute -right-12 top-0 p-2 bg-white border border-slate-200 rounded-lg shadow-sm text-indigo-600 opacity-0 group-hover/msg:opacity-100 transition-opacity hover:bg-indigo-50"
+                            title="Esporta solo questa risposta"
+                          >
+                            <Download size={16} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -485,7 +527,7 @@ export const ProcessView: React.FC = () => {
               {/* Action Buttons Overlay */}
               {messages.length > 0 && !status.isProcessing && (
                 <div className="absolute bottom-28 right-8 flex flex-col space-y-2">
-                  <button onClick={exportToPdf} className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 text-white rounded-full shadow-xl hover:bg-indigo-700 transition-all active:scale-95 text-sm font-bold">
+                  <button onClick={() => exportToPdf()} className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 text-white rounded-full shadow-xl hover:bg-indigo-700 transition-all active:scale-95 text-sm font-bold">
                     <Download size={18} />
                     <span>Esporta Report</span>
                   </button>
