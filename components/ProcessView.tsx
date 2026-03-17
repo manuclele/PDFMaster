@@ -12,7 +12,8 @@ import {
   Bot, 
   Trash2, 
   Sparkles,
-  FileSearch
+  FileSearch,
+  X
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 
