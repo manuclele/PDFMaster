@@ -24,3 +24,22 @@ export interface ProcessingState {
 }
 
 export type ViewMode = 'merge' | 'split' | 'process';
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  timestamp: number;
+  fileNames: string[];
+}
+
+export interface PromptPreset {
+  id: string;
+  name: string;
+  prompt: string;
+}
