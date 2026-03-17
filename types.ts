@@ -32,6 +32,7 @@ export interface ChatMessage {
 
 export interface ChatSession {
   id: string;
+  userId: string;
   title: string;
   messages: ChatMessage[];
   timestamp: number;
@@ -40,6 +41,7 @@ export interface ChatSession {
 
 export interface PromptPreset {
   id: string;
+  userId: string;
   name: string;
   prompt: string;
 }

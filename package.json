@@ -12,6 +12,7 @@
   "dependencies": {
     "@google/genai": "^1.45.0",
     "file-saver": "^2.0.5",
+    "firebase": "^12.10.0",
     "gl-matrix": "^3.4.4",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.0",

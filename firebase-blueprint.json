@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "A chat conversation session with the AI",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique session ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "title": { "type": "string", "description": "Chat title" },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": { "type": "string", "enum": ["user", "model"] },
+              "text": { "type": "string" }
+            }
+          }
+        },
+        "timestamp": { "type": "number", "description": "Last update timestamp" },
+        "fileNames": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "userId", "title", "messages", "timestamp"]
+    },
+    "PromptPreset": {
+      "title": "PromptPreset",
+      "description": "A saved AI prompt preset",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique preset ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "name": { "type": "string", "description": "Preset name" },
+        "prompt": { "type": "string", "description": "Preset prompt text" }
+      },
+      "required": ["id", "userId", "name", "prompt"]
+    }
+  },
+  "firestore": {
+    "sessions": {
+      "schema": "ChatSession",
+      "description": "User chat sessions"
+    },
+    "presets": {
+      "schema": "PromptPreset",
+      "description": "User prompt presets"
+    }
+  }
+}

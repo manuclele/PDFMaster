@@ -1,0 +1,97 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: sessions
+// Document ID: {sessionId}
+// Fields:
+//   - id: string (required) - Unique session ID
+//   - userId: string (required) - Owner user ID
+//   - title: string (required) - Chat title
+//   - messages: list (required) - Array of {role: string, text: string}
+//   - timestamp: number (required) - Last update timestamp
+//   - fileNames: list (optional) - Array of strings
+//
+// Collection: presets
+// Document ID: {presetId}
+// Fields:
+//   - id: string (required) - Unique preset ID
+//   - userId: string (required) - Owner user ID
+//   - name: string (required) - Preset name
+//   - prompt: string (required) - Preset prompt text
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "manuclele@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidSession(data) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'messages', 'timestamp']) &&
+             data.id is string && data.id.size() > 0 &&
+             data.userId == request.auth.uid &&
+             data.title is string && data.title.size() <= 200 &&
+             data.messages is list && data.messages.size() <= 1000 &&
+             data.timestamp is number;
+    }
+
+    function isValidPreset(data) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'prompt']) &&
+             data.id is string && data.id.size() > 0 &&
+             data.userId == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.prompt is string && data.prompt.size() > 0 && data.prompt.size() <= 5000;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /sessions/{sessionId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidSession(request.resource.data);
+      allow update: if isDocOwner() && isValidSession(request.resource.data) && 
+                      request.resource.data.userId == resource.data.userId;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /presets/{presetId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidPreset(request.resource.data);
+      allow update: if isDocOwner() && isValidPreset(request.resource.data) && 
+                      request.resource.data.userId == resource.data.userId;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+    
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isAdmin();
+    }
+  }
+}

@@ -6,11 +6,27 @@ import { chatWithPdf, generateChatTitle } from '../services/geminiService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { 
+  db, 
+  auth, 
+  googleProvider, 
+  signInWithPopup, 
+  onAuthStateChanged, 
+  doc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  collection, 
+  query, 
+  where, 
+  onSnapshot,
+  User
+} from '../firebase';
+import { 
   FileText, 
   Loader2, 
   AlertCircle, 
   Send, 
-  User, 
+  User as UserIcon, 
   Bot, 
   Trash2, 
   Sparkles,
@@ -24,9 +40,11 @@ import {
   ChevronLeft,
   Menu,
   MessageSquare,
-  Square,
   Copy,
-  Edit2
+  Edit2,
+  Square,
+  LogOut,
+  LogIn
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -45,9 +63,12 @@ export const ProcessView: React.FC = () => {
   const [showSidebar, setShowSidebar] = useState(true);
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [newPresetName, setNewPresetName] = useState('');
+  const [newPresetPrompt, setNewPresetPrompt] = useState('');
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [showPresets, setShowPresets] = useState(false);
   
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [status, setStatus] = useState<ProcessingState>({ isProcessing: false, message: '', error: null });
   
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -58,75 +79,95 @@ export const ProcessView: React.FC = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Load data from localStorage on mount
+  // Auth Listener
   useEffect(() => {
-    const savedSessions = localStorage.getItem('pdf_master_sessions');
-    const savedPresets = localStorage.getItem('pdf_master_presets');
-    
-    if (savedSessions) {
-      try {
-        setSessions(JSON.parse(savedSessions));
-      } catch (e) { console.error('Failed to load sessions', e); }
-    }
-    
-    if (savedPresets) {
-      try {
-        setPresets(JSON.parse(savedPresets));
-      } catch (e) { console.error('Failed to load presets', e); }
-    } else {
-      // Default presets
-      const defaultPresets: PromptPreset[] = [
-        { id: '1', name: 'Analisi Carburante', prompt: 'Dividi i rifornimenti per targa e dammi i totali in litri ed euro (comprensivi di IVA). Non tenere conto dell\'AdBlue.' },
-        { id: '2', name: 'Riassunto Esecutivo', prompt: 'Fai un riassunto dei dati principali di tutti i file in una tabella strutturata.' },
-        { id: '3', name: 'Estrazione Totali', prompt: 'Estrai tutti i totali in euro suddivisi per file e calcola il totale generale.' }
-      ];
-      setPresets(defaultPresets);
-      localStorage.setItem('pdf_master_presets', JSON.stringify(defaultPresets));
-    }
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
   }, []);
 
-  // Save sessions to localStorage when they change
+  // Firestore Sync - Sessions
   useEffect(() => {
-    if (sessions.length > 0) {
-      localStorage.setItem('pdf_master_sessions', JSON.stringify(sessions));
+    if (!user || !isAuthReady) {
+      setSessions([]);
+      return;
     }
-  }, [sessions]);
+
+    const q = query(collection(db, 'sessions'), where('userId', '==', user.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(d => d.data() as ChatSession);
+      setSessions(docs.sort((a, b) => b.timestamp - a.timestamp));
+    }, (error) => {
+      console.error("Firestore Sessions Error:", error);
+    });
+
+    return () => unsubscribe();
+  }, [user, isAuthReady]);
+
+  // Firestore Sync - Presets
+  useEffect(() => {
+    if (!user || !isAuthReady) {
+      // Fallback to defaults if not logged in
+      const defaultPresets: PromptPreset[] = [
+        { id: '1', userId: 'system', name: 'Analisi Carburante', prompt: 'Dividi i rifornimenti per targa e dammi i totali in litri ed euro (comprensivi di IVA). Non tenere conto dell\'AdBlue.' },
+        { id: '2', userId: 'system', name: 'Riassunto Esecutivo', prompt: 'Fai un riassunto dei dati principali di tutti i file in una tabella strutturata.' },
+        { id: '3', userId: 'system', name: 'Estrazione Totali', prompt: 'Estrai tutti i totali in euro suddivisi per file e calcola il totale generale.' }
+      ];
+      setPresets(defaultPresets);
+      return;
+    }
+
+    const q = query(collection(db, 'presets'), where('userId', '==', user.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(d => d.data() as PromptPreset);
+      setPresets(docs);
+    }, (error) => {
+      console.error("Firestore Presets Error:", error);
+    });
+
+    return () => unsubscribe();
+  }, [user, isAuthReady]);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      setStatus({ ...status, error: `Login fallito: ${err.message}` });
+    }
+  };
+
+  const handleLogout = () => auth.signOut();
 
   // Update current session in history
   useEffect(() => {
-    if (messages.length > 0) {
-      setSessions(prev => {
-        const existingIdx = prev.findIndex(s => s.id === currentSessionId);
-        
-        let title = 'Nuova Chat';
-        if (existingIdx >= 0) {
-          title = prev[existingIdx].title;
-        } else {
-          // Only set temporary title if it's really a new session
-          const userMsg = messages.find(m => m.role === 'user');
-          title = userMsg ? userMsg.text.slice(0, 30) + '...' : 'Nuova Chat';
-        }
-        
-        const updatedSession: ChatSession = {
-          id: currentSessionId,
-          title,
-          messages,
-          timestamp: Date.now(),
-          fileNames: files.map(f => f.name)
-        };
-        
-        let newSessions;
-        if (existingIdx >= 0) {
-          newSessions = [...prev];
-          newSessions[existingIdx] = updatedSession;
-        } else {
-          newSessions = [updatedSession, ...prev];
-        }
-        return newSessions;
+    if (messages.length > 0 && user) {
+      const existingIdx = sessions.findIndex(s => s.id === currentSessionId);
+      
+      let title = 'Nuova Chat';
+      if (existingIdx >= 0) {
+        title = sessions[existingIdx].title;
+      } else {
+        const userMsg = messages.find(m => m.role === 'user');
+        title = userMsg ? userMsg.text.slice(0, 30) + '...' : 'Nuova Chat';
+      }
+      
+      const updatedSession: ChatSession = {
+        id: currentSessionId,
+        userId: user.uid,
+        title,
+        messages,
+        timestamp: Date.now(),
+        fileNames: files.map(f => f.name)
+      };
+      
+      setDoc(doc(db, 'sessions', currentSessionId), updatedSession).catch(err => {
+        console.error("Error saving session:", err);
       });
     }
     scrollToBottom();
-  }, [messages, currentSessionId, files]);
+  }, [messages, currentSessionId, files, user]);
 
   const handleFilesSelected = async (newFiles: File[]) => {
     const pdfFiles = newFiles.filter(f => f.type === 'application/pdf');
@@ -183,11 +224,11 @@ export const ProcessView: React.FC = () => {
       // Generate title if it's the first exchange
       if (messages.length === 0) {
         generateChatTitle(userMessage, response).then(title => {
-          setSessions(prev => {
-            const updated = prev.map(s => s.id === currentSessionId ? { ...s, title } : s);
-            localStorage.setItem('pdf_master_sessions', JSON.stringify(updated));
-            return updated;
-          });
+          if (user) {
+            updateDoc(doc(db, 'sessions', currentSessionId), { title }).catch(err => {
+              console.error("Error updating title:", err);
+            });
+          }
         });
       }
       
@@ -236,7 +277,11 @@ export const ProcessView: React.FC = () => {
 
   const deleteSession = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSessions(prev => prev.filter(s => s.id !== id));
+    if (user) {
+      deleteDoc(doc(db, 'sessions', id)).catch(err => {
+        console.error("Error deleting session:", err);
+      });
+    }
     if (currentSessionId === id) {
       startNewChat();
     }
@@ -246,6 +291,7 @@ export const ProcessView: React.FC = () => {
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
     if (!lastUserMsg) return;
     setNewPresetName('Analisi Personalizzata');
+    setNewPresetPrompt(lastUserMsg.text);
     setEditingPresetId(null);
     setShowPresetModal(true);
   };
@@ -253,50 +299,60 @@ export const ProcessView: React.FC = () => {
   const openEditPreset = (preset: PromptPreset, e: React.MouseEvent) => {
     e.stopPropagation();
     setNewPresetName(preset.name);
+    setNewPresetPrompt(preset.prompt);
     setEditingPresetId(preset.id);
     setShowPresetModal(true);
   };
 
   const duplicatePreset = (preset: PromptPreset, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!user) return;
     const newPreset: PromptPreset = {
       ...preset,
       id: crypto.randomUUID(),
+      userId: user.uid,
       name: `${preset.name} (Copia)`
     };
-    const updatedPresets = [...presets, newPreset];
-    setPresets(updatedPresets);
-    localStorage.setItem('pdf_master_presets', JSON.stringify(updatedPresets));
+    setDoc(doc(db, 'presets', newPreset.id), newPreset).catch(err => {
+      console.error("Error duplicating preset:", err);
+    });
   };
 
   const confirmSavePreset = () => {
-    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-    if (!newPresetName.trim()) return;
+    if (!newPresetName.trim() || !newPresetPrompt.trim() || !user) return;
 
-    let updatedPresets;
     if (editingPresetId) {
-      updatedPresets = presets.map(p => p.id === editingPresetId ? { ...p, name: newPresetName.trim() } : p);
+      updateDoc(doc(db, 'presets', editingPresetId), { 
+        name: newPresetName.trim(), 
+        prompt: newPresetPrompt.trim() 
+      }).catch(err => {
+        console.error("Error updating preset:", err);
+      });
     } else {
-      if (!lastUserMsg) return;
       const newPreset: PromptPreset = {
         id: crypto.randomUUID(),
+        userId: user.uid,
         name: newPresetName.trim(),
-        prompt: lastUserMsg.text
+        prompt: newPresetPrompt.trim()
       };
-      updatedPresets = [...presets, newPreset];
+      setDoc(doc(db, 'presets', newPreset.id), newPreset).catch(err => {
+        console.error("Error saving preset:", err);
+      });
     }
     
-    setPresets(updatedPresets);
-    localStorage.setItem('pdf_master_presets', JSON.stringify(updatedPresets));
     setShowPresetModal(false);
     setEditingPresetId(null);
+    setNewPresetName('');
+    setNewPresetPrompt('');
   };
 
   const deletePreset = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const updatedPresets = presets.filter(p => p.id !== id);
-    setPresets(updatedPresets);
-    localStorage.setItem('pdf_master_presets', JSON.stringify(updatedPresets));
+    if (user) {
+      deleteDoc(doc(db, 'presets', id)).catch(err => {
+        console.error("Error deleting preset:", err);
+      });
+    }
   };
 
   const exportToPdf = async (specificMessage?: ChatMessage) => {
@@ -541,6 +597,42 @@ export const ProcessView: React.FC = () => {
             ))}
           </div>
         </div>
+
+        {/* User Profile Section */}
+        <div className="p-4 border-t border-slate-200 bg-white">
+          {user ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3 overflow-hidden">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt={user.displayName || ''} className="w-8 h-8 rounded-full border border-slate-200" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                    <UserIcon size={16} />
+                  </div>
+                )}
+                <div className="overflow-hidden">
+                  <p className="text-xs font-bold text-slate-800 truncate">{user.displayName || 'Utente'}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
+                </div>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                title="Logout"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={handleLogin}
+              className="w-full flex items-center justify-center space-x-2 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all text-sm font-bold shadow-sm"
+            >
+              <LogIn size={16} />
+              <span>Accedi con Google</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Chat Area */}
@@ -627,7 +719,7 @@ export const ProcessView: React.FC = () => {
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4`}>
                     <div className={`flex max-w-[85%] space-x-3 ${msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`}>
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-primary-600 text-white' : 'bg-indigo-100 text-indigo-600'}`}>
-                        {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                        {msg.role === 'user' ? <UserIcon size={16} /> : <Bot size={16} />}
                       </div>
                       <div className={`p-4 rounded-2xl shadow-sm relative group/msg ${msg.role === 'user' ? 'bg-primary-600 text-white rounded-tr-none' : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'}`}>
                         <div className="prose prose-sm max-w-none">
@@ -743,30 +835,45 @@ export const ProcessView: React.FC = () => {
                   : 'Dai un nome a questa richiesta per riutilizzarla velocemente in futuro.'}
               </p>
             </div>
-            <div className="p-6">
-              <label className="block text-sm font-bold text-slate-700 mb-2">Nome Preset</label>
-              <input 
-                type="text" 
-                value={newPresetName}
-                onChange={(e) => setNewPresetName(e.target.value)}
-                placeholder="es. Analisi Carburanti Mensile"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                autoFocus
-              />
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Nome Preset</label>
+                <input 
+                  type="text" 
+                  value={newPresetName}
+                  onChange={(e) => setNewPresetName(e.target.value)}
+                  placeholder="es. Analisi Carburanti Mensile"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Istruzioni (Prompt)</label>
+                <textarea 
+                  value={newPresetPrompt}
+                  onChange={(e) => setNewPresetPrompt(e.target.value)}
+                  placeholder="Inserisci le istruzioni per l'AI..."
+                  rows={4}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all resize-none text-sm"
+                />
+              </div>
             </div>
             <div className="p-6 bg-slate-50 rounded-b-2xl flex justify-end space-x-3">
               <button 
-                onClick={() => setShowPresetModal(false)}
+                onClick={() => {
+                  setShowPresetModal(false);
+                  setEditingPresetId(null);
+                }}
                 className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition-colors"
               >
                 Annulla
               </button>
               <button 
                 onClick={confirmSavePreset}
-                disabled={!newPresetName.trim()}
+                disabled={!newPresetName.trim() || !newPresetPrompt.trim()}
                 className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Salva Preset
+                {editingPresetId ? 'Aggiorna Preset' : 'Salva Preset'}
               </button>
             </div>
           </div>
