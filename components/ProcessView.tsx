@@ -251,46 +251,56 @@ export const ProcessView: React.FC = () => {
     const targetElement = chatContainerRef.current;
     if (!targetElement || messages.length === 0) return;
     
-    setStatus({ isProcessing: true, message: 'Preparazione report PDF professionale...', error: null });
+    setStatus({ isProcessing: true, message: 'Generazione documento in corso...', error: null });
     
     try {
       // Create a temporary container for the PDF export
       const exportContainer = document.createElement('div');
       exportContainer.className = 'pdf-export-container';
-      exportContainer.style.position = 'absolute';
-      exportContainer.style.left = '-9999px';
-      exportContainer.style.top = '0';
-      exportContainer.style.width = '190mm'; // Standard content width for A4
+      // We make it visible but behind a loading overlay to ensure browser renders it
+      exportContainer.style.position = 'fixed';
+      exportContainer.style.left = '50%';
+      exportContainer.style.top = '50%';
+      exportContainer.style.transform = 'translate(-50%, -50%)';
+      exportContainer.style.width = '210mm';
+      exportContainer.style.maxHeight = '90vh';
+      exportContainer.style.overflow = 'auto';
+      exportContainer.style.zIndex = '9999';
       exportContainer.style.backgroundColor = 'white';
-      exportContainer.style.padding = '10mm';
+      exportContainer.style.padding = '20mm';
+      exportContainer.style.boxShadow = '0 0 50px rgba(0,0,0,0.5)';
+      exportContainer.style.visibility = 'hidden'; // Hidden from user but visible to DOM
       
       // Add a professional header
       const header = document.createElement('div');
-      header.style.borderBottom = '1px solid #000';
+      header.style.borderBottom = '2px solid #1e293b';
       header.style.marginBottom = '30px';
-      header.style.paddingBottom = '10px';
+      header.style.paddingBottom = '15px';
+      header.style.fontFamily = 'sans-serif';
       header.innerHTML = `
-        <div style="display: flex; justify-between; align-items: center;">
-          <h1 style="margin: 0; font-size: 24pt; font-weight: bold; color: #000;">REPORT ANALISI</h1>
-          <div style="text-align: right; font-size: 10pt; color: #666;">
-            <div>Data: ${new Date().toLocaleDateString('it-IT')}</div>
-            <div>Ora: ${new Date().toLocaleTimeString('it-IT')}</div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <h1 style="margin: 0; font-size: 26pt; font-weight: 800; color: #1e293b;">REPORT ANALISI</h1>
+            <div style="margin-top: 5px; font-size: 10pt; color: #64748b;">Documento generato tramite PDF Master AI</div>
+          </div>
+          <div style="text-align: right; font-size: 10pt; color: #1e293b;">
+            <div style="font-weight: bold;">Data: ${new Date().toLocaleDateString('it-IT')}</div>
+            <div>Ora: ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</div>
           </div>
         </div>
-        <div style="margin-top: 10px; font-size: 9pt; color: #444;">
-          ${files.length > 0 ? `<strong>Documenti sorgente:</strong> ${files.map(f => f.name).join(', ')}` : ''}
+        <div style="margin-top: 20px; font-size: 9pt; color: #475569; line-height: 1.4;">
+          ${files.length > 0 ? `<strong>File analizzati:</strong> ${files.map(f => f.name).join(', ')}` : ''}
         </div>
       `;
       exportContainer.appendChild(header);
 
       const contentWrapper = document.createElement('div');
+      contentWrapper.style.fontFamily = 'sans-serif';
       
       if (specificMessage) {
-        // Export only one message
         const msgDiv = document.createElement('div');
         msgDiv.className = 'markdown-body';
         
-        // Find the original markdown content to avoid cloning UI elements
         const originalMsgEl = targetElement.querySelectorAll('.animate-in')[messages.indexOf(specificMessage)];
         const markdownContent = originalMsgEl?.querySelector('.markdown-body')?.cloneNode(true) as HTMLElement;
         
@@ -301,19 +311,19 @@ export const ProcessView: React.FC = () => {
         }
         contentWrapper.appendChild(msgDiv);
       } else {
-        // Export full conversation
         messages.forEach((msg, idx) => {
           const section = document.createElement('div');
-          section.style.marginBottom = '25px';
+          section.style.marginBottom = '30px';
           section.style.pageBreakInside = 'avoid';
           
           const label = document.createElement('div');
-          label.style.fontSize = '8pt';
-          label.style.fontWeight = 'bold';
-          label.style.textTransform = 'uppercase';
-          label.style.color = '#888';
-          label.style.marginBottom = '5px';
-          label.innerText = msg.role === 'user' ? 'UTENTE' : 'ASSISTENTE AI';
+          label.style.fontSize = '9pt';
+          label.style.fontWeight = '800';
+          label.style.color = msg.role === 'user' ? '#4f46e5' : '#0f172a';
+          label.style.borderLeft = `4px solid ${msg.role === 'user' ? '#4f46e5' : '#0f172a'}`;
+          label.style.paddingLeft = '10px';
+          label.style.marginBottom = '10px';
+          label.innerText = msg.role === 'user' ? 'DOMANDA UTENTE' : 'ANALISI ASSISTENTE AI';
           section.appendChild(label);
           
           const msgDiv = document.createElement('div');
@@ -332,39 +342,43 @@ export const ProcessView: React.FC = () => {
         });
       }
 
-      // Apply strict table styles to the export container
+      // Apply strict table styles
       const tables = contentWrapper.querySelectorAll('table');
       tables.forEach((table: any) => {
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
-        table.style.marginBottom = '20px';
-        table.style.pageBreakInside = 'avoid'; // Prevent table from splitting
+        table.style.margin = '20px 0';
+        table.style.fontSize = '10pt';
+        table.style.pageBreakInside = 'avoid';
         
         const cells = table.querySelectorAll('th, td');
         cells.forEach((cell: any) => {
-          cell.style.border = '1px solid #ccc';
-          cell.style.padding = '8px';
-          cell.style.fontSize = '10pt';
+          cell.style.border = '1px solid #e2e8f0';
+          cell.style.padding = '10px';
         });
         
         const headers = table.querySelectorAll('th');
         headers.forEach((h: any) => {
-          h.style.backgroundColor = '#f0f0f0';
-          h.style.fontWeight = 'bold';
+          h.style.backgroundColor = '#f8fafc';
+          h.style.color = '#1e293b';
+          h.style.textAlign = 'left';
         });
       });
 
       exportContainer.appendChild(contentWrapper);
       document.body.appendChild(exportContainer);
 
-      // Wait for any potential rendering
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Crucial: wait for browser to actually paint the hidden element
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       const pdf = new jsPDF('p', 'mm', 'a4');
       const session = sessions.find(s => s.id === currentSessionId);
       const fileName = specificMessage 
         ? `Risposta_AI_${new Date().getTime()}.pdf` 
         : `${session?.title.replace(/[^a-z0-9]/gi, '_') || 'Report'}_${new Date().getTime()}.pdf`;
+
+      // Make it temporarily visible for capture
+      exportContainer.style.visibility = 'visible';
 
       await pdf.html(exportContainer, {
         callback: (doc) => {
@@ -377,7 +391,7 @@ export const ProcessView: React.FC = () => {
         x: 10,
         y: 10,
         width: 190,
-        windowWidth: 800,
+        windowWidth: 850,
         autoPaging: 'text'
       });
     } catch (err: any) {

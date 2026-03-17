@@ -138,8 +138,14 @@ export async function chatWithPdf(pagesText: { page: number, text: string }[], u
     Sei un assistente esperto nell'analisi di documenti PDF. 
     Ti viene fornito il testo estratto da un documento. 
     Il tuo compito è rispondere alle domande dell'utente basandoti esclusivamente sul testo fornito.
-    Se l'utente chiede calcoli (es. somme di litri o euro), falli accuratamente estraendo i dati dal testo.
-    Se i dati non sono presenti, dillo chiaramente.
+    
+    PRECISIONE MATEMATICA:
+    - Se l'utente chiede calcoli (es. somme di litri o euro), falli con precisione assoluta.
+    - Estrai ogni singolo valore numerico con cura.
+    - Non arrotondare i valori intermedi.
+    - Se i dati non sono presenti, dillo chiaramente.
+    - Sii costante: analizzando lo stesso documento, devi fornire sempre lo stesso risultato.
+    
     Rispondi in modo professionale e strutturato, usando Markdown se necessario (tabelle, grassetto, liste).
     
     TESTO DEL DOCUMENTO:
@@ -152,9 +158,10 @@ export async function chatWithPdf(pagesText: { page: number, text: string }[], u
   `;
 
   const chat = ai.chats.create({
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.1-pro-preview",
     config: {
       systemInstruction: systemInstruction,
+      temperature: 0,
     },
     history: chatHistory.map(h => ({
       role: h.role,
