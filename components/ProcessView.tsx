@@ -26,6 +26,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export const ProcessView: React.FC = () => {
   // Chat State
@@ -229,18 +230,95 @@ export const ProcessView: React.FC = () => {
 
   const exportToPdf = async () => {
     if (!chatContainerRef.current || messages.length === 0) return;
-    setStatus({ isProcessing: true, message: 'Generazione PDF in corso...', error: null });
+    
+    setStatus({ isProcessing: true, message: 'Preparazione report PDF...', error: null });
+    
     try {
-      const canvas = await html2canvas(chatContainerRef.current, { scale: 2, useCORS: true });
+      // Create a temporary container for the PDF export to ensure full content is captured
+      const exportContainer = document.createElement('div');
+      exportContainer.style.position = 'absolute';
+      exportContainer.style.left = '-9999px';
+      exportContainer.style.top = '0';
+      exportContainer.style.width = '800px'; // Standard width for A4
+      exportContainer.style.backgroundColor = 'white';
+      exportContainer.style.padding = '40px';
+      exportContainer.className = 'pdf-export-container';
+      
+      // Add a header to the PDF
+      const header = document.createElement('div');
+      header.innerHTML = `
+        <div style="border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px;">
+          <h1 style="color: #1e293b; margin: 0; font-size: 24px;">Report Analisi Documenti</h1>
+          <p style="color: #64748b; margin: 5px 0 0 0; font-size: 14px;">Generato il: ${new Date().toLocaleString()}</p>
+          <p style="color: #64748b; margin: 2px 0 0 0; font-size: 12px;">File analizzati: ${files.map(f => f.name).join(', ')}</p>
+        </div>
+      `;
+      exportContainer.appendChild(header);
+
+      // Clone the chat messages but style them for a document
+      const messagesClone = chatContainerRef.current.cloneNode(true) as HTMLElement;
+      messagesClone.style.height = 'auto';
+      messagesClone.style.overflow = 'visible';
+      messagesClone.style.padding = '0';
+      
+      // Remove avatars and user bubbles styling for a cleaner report
+      const avatars = messagesClone.querySelectorAll('.w-10.h-10');
+      avatars.forEach((a: any) => a.remove());
+
+      const bubbles = messagesClone.querySelectorAll('.rounded-3xl');
+      bubbles.forEach((b: any) => {
+        b.style.boxShadow = 'none';
+        b.style.border = '1px solid #e2e8f0';
+        b.style.borderRadius = '8px';
+        if (b.classList.contains('bg-primary-600')) {
+          b.style.backgroundColor = '#f8fafc';
+          b.style.color = '#1e293b';
+          b.style.borderColor = '#cbd5e1';
+          const text = b.querySelector('.text-white');
+          if (text) text.style.color = '#1e293b';
+        }
+      });
+
+      exportContainer.appendChild(messagesClone);
+      document.body.appendChild(exportContainer);
+
+      // Wait a bit for images and styles to be fully applied
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const canvas = await html2canvas(exportContainer, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      document.body.removeChild(exportContainer);
+
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Report_${new Date().getTime()}.pdf`);
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pdfWidth - 20; // 10mm margin each side
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      let heightLeft = imgHeight;
+      let position = 10; // 10mm top margin
+
+      pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+      heightLeft -= (pdfHeight - 20);
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight + 10;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+        heightLeft -= (pdfHeight - 20);
+      }
+
+      pdf.save(`Report_Analisi_${new Date().getTime()}.pdf`);
       setStatus({ isProcessing: false, message: '', error: null });
     } catch (err: any) {
-      setStatus({ isProcessing: false, message: '', error: `Errore export: ${err.message}` });
+      console.error(err);
+      setStatus({ isProcessing: false, message: '', error: `Errore durante l'esportazione: ${err.message}` });
     }
   };
 
@@ -382,7 +460,7 @@ export const ProcessView: React.FC = () => {
                       <div className={`p-5 rounded-3xl shadow-sm ${msg.role === 'user' ? 'bg-primary-600 text-white rounded-tr-none' : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none'}`}>
                         <div className="prose prose-sm max-w-none">
                           <div className={msg.role === 'user' ? 'text-white' : 'markdown-body'}>
-                            <Markdown>{msg.text}</Markdown>
+                            <Markdown remarkPlugins={[remarkGfm]}>{msg.text}</Markdown>
                           </div>
                         </div>
                       </div>

@@ -147,6 +147,8 @@ export async function chatWithPdf(pagesText: { page: number, text: string }[], u
     
     IMPORTANTE: Non puoi generare file scaricabili o link a file direttamente. 
     Se l'utente ti chiede di creare un PDF o un file scaricabile, rispondi che hai elaborato i dati e che può scaricare il report cliccando sul pulsante "Esporta Report PDF" presente nell'interfaccia dell'applicazione.
+    
+    FORMATTAZIONE: Usa SEMPRE le tabelle Markdown per mostrare dati strutturati (come elenchi di targhe, litri, euro). Non usare elenchi puntati per dati tabulari.
   `;
 
   const chat = ai.chats.create({
