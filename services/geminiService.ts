@@ -158,7 +158,7 @@ export async function chatWithPdf(pagesText: { page: number, text: string }[], u
   `;
 
   const chat = ai.chats.create({
-    model: "gemini-3.1-pro-preview",
+    model: "gemini-3-flash-preview",
     config: {
       systemInstruction: systemInstruction,
       temperature: 0,

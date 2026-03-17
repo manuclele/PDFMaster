@@ -402,6 +402,13 @@ export const ProcessView: React.FC = () => {
     }
   };
 
+  const formatError = (error: string) => {
+    if (error.includes('429') || error.toLowerCase().includes('quota')) {
+      return "Limite messaggi raggiunto per questo modello. Ho ripristinato il modello standard per permetterti di continuare. Riprova ora.";
+    }
+    return error;
+  };
+
   return (
     <div className="flex h-[calc(100vh-140px)] bg-slate-100/30 rounded-3xl border border-slate-200 shadow-xl overflow-hidden relative">
       {/* Sidebar */}
@@ -635,10 +642,10 @@ export const ProcessView: React.FC = () => {
 
       {/* Error Toast */}
       {status.error && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-50 p-4 bg-red-600 text-white rounded-2xl shadow-2xl flex items-center space-x-3 animate-in fade-in slide-in-from-top-4">
-          <AlertCircle size={20} />
-          <span className="text-sm font-medium">{status.error}</span>
-          <button onClick={() => setStatus({ ...status, error: null })} className="p-1 hover:bg-white/20 rounded-lg">
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-50 p-4 bg-red-600 text-white rounded-2xl shadow-2xl flex items-center space-x-3 animate-in fade-in slide-in-from-top-4 max-w-lg">
+          <AlertCircle size={20} className="flex-shrink-0" />
+          <span className="text-sm font-medium">{formatError(status.error)}</span>
+          <button onClick={() => setStatus({ ...status, error: null })} className="p-1 hover:bg-white/20 rounded-lg flex-shrink-0">
             <X size={16} />
           </button>
         </div>
