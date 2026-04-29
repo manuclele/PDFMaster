@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { UploadedFile, ProcessingState, ViewMode } from './types';
 import { mergePdfs, createPdfBlob } from './utils/pdfHandler';
+import { formatFileSize } from './utils/formatters';
 import { Dropzone } from './components/Dropzone';
 import { FileGrid } from './components/FileGrid';
 import { PerspectiveEditor } from './components/PerspectiveEditor';
@@ -8,12 +9,13 @@ import { SplitView } from './components/SplitView';
 import { ProcessView } from './components/ProcessView';
 import { warpPerspective } from './utils/perspectiveUtils';
 import { Point } from './types';
-import { Layers, FileStack, ArrowRight, Download, RefreshCw, AlertCircle, Edit3, FileSearch, Scissors, Combine } from 'lucide-react';
+import { Layers, FileStack, ArrowRight, Download, RefreshCw, AlertCircle, CheckCircle2, Edit3, FileSearch, Scissors, Combine } from 'lucide-react';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('merge');
-  const [outputFilename, setOutputFilename] = useState<string>('merged-document');
+  const [outputFilename, setOutputFilename] = useState<string>('documento-unito');
+  const [shouldOptimize, setShouldOptimize] = useState<boolean>(true);
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [status, setStatus] = useState<ProcessingState>({
     isProcessing: false,
@@ -180,13 +182,14 @@ const App: React.FC = () => {
     }
 
     try {
-      setStatus({ isProcessing: true, message: 'Merging your documents...', error: null });
+      setStatus({ isProcessing: true, message: 'Unione dei documenti in corso...', error: null });
       
       // Artificial delay for better UX (so the user sees the processing state)
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      const mergedBytes = await mergePdfs(files);
+      const mergedBytes = await mergePdfs(files, shouldOptimize);
       const url = createPdfBlob(mergedBytes);
+      const finalSize = formatFileSize(mergedBytes.length);
       
       // Determine filename
       const safeName = outputFilename.trim() || 'merged-document';
@@ -201,7 +204,12 @@ const App: React.FC = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      setStatus({ isProcessing: false, message: '', error: null });
+      setStatus({ isProcessing: false, message: `Merge completato! Dimensione finale: ${finalSize}`, error: null });
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setStatus(prev => prev.message.includes('Merge completato') ? { ...prev, message: '' } : prev);
+      }, 5000);
     } catch (err) {
       console.error(err);
       setStatus({ 
@@ -218,7 +226,7 @@ const App: React.FC = () => {
         if (f.preview) URL.revokeObjectURL(f.preview);
       });
       setFiles([]);
-      setOutputFilename('merged-document');
+      setOutputFilename('documento-unito');
       setStatus({ isProcessing: false, message: '', error: null });
     }
   };
@@ -311,10 +319,18 @@ const App: React.FC = () => {
                 disabled={status.isProcessing}
               />
               
-              {status.error && (
-                <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl flex items-center text-red-600">
-                  <AlertCircle size={20} className="mr-2" />
-                  {status.error}
+              {(status.error || status.message) && (
+                <div className={`mt-4 p-4 rounded-xl flex items-center transition-all animate-in fade-in slide-in-from-top-4 ${
+                  status.error ? 'bg-red-50 border border-red-100 text-red-600' : 'bg-green-50 border border-green-100 text-green-600'
+                }`}>
+                  {status.error ? (
+                    <AlertCircle size={20} className="mr-2" />
+                  ) : (
+                    <CheckCircle2 size={20} className="mr-2" />
+                  )}
+                  <span className="text-sm font-medium">
+                    {status.error || status.message}
+                  </span>
                 </div>
               )}
 
@@ -331,9 +347,22 @@ const App: React.FC = () => {
                   
                   <div className="flex items-center space-x-3 w-full sm:w-auto justify-between sm:justify-start px-2">
                     <div className="text-sm font-medium text-slate-600 pr-2 border-r border-slate-200">
-                      {files.length} file{files.length !== 1 ? 's' : ''}
+                      {files.length} file{files.length !== 1 ? 's' : ''} ({formatFileSize(files.reduce((acc, f) => acc + f.file.size, 0))})
                     </div>
                     
+                    <div className="flex items-center space-x-2 pr-2 border-r border-slate-200">
+                      <input
+                        type="checkbox"
+                        id="optimize"
+                        checked={shouldOptimize}
+                        onChange={(e) => setShouldOptimize(e.target.checked)}
+                        className="w-4 h-4 text-primary-600 border-slate-300 rounded focus:ring-primary-500"
+                      />
+                      <label htmlFor="optimize" className="text-xs font-bold text-slate-600 cursor-pointer select-none">
+                        Ottimizza
+                      </label>
+                    </div>
+
                     <button
                       onClick={handleReset}
                       disabled={status.isProcessing}
@@ -372,12 +401,12 @@ const App: React.FC = () => {
                     {status.isProcessing ? (
                       <>
                         <RefreshCw size={18} className="animate-spin" />
-                        <span>Processing...</span>
+                        <span>Elaborazione...</span>
                       </>
                     ) : (
                       <>
                         <FileStack size={18} />
-                        <span>Merge PDF</span>
+                        <span>Unisci PDF</span>
                         <ArrowRight size={18} className="opacity-70" />
                       </>
                     )}

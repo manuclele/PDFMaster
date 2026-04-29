@@ -1,7 +1,7 @@
 import { PDFDocument } from 'pdf-lib';
 import { UploadedFile } from '../types';
 
-export const mergePdfs = async (files: UploadedFile[]): Promise<Uint8Array> => {
+export const mergePdfs = async (files: UploadedFile[], optimize: boolean = false): Promise<Uint8Array> => {
   const mergedPdf = await PDFDocument.create();
 
   for (const uploadedFile of files) {
@@ -13,13 +13,57 @@ export const mergePdfs = async (files: UploadedFile[]): Promise<Uint8Array> => {
       copiedPages.forEach((page) => mergedPdf.addPage(page));
     } else {
       // Handle Image
+      let imageData = arrayBuffer;
+      
+      // If optimize is true, we can try to compress the image before embedding
+      if (optimize && (uploadedFile.file.type === 'image/jpeg' || uploadedFile.file.type === 'image/png')) {
+        try {
+          const img = new Image();
+          const url = URL.createObjectURL(uploadedFile.file);
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = url;
+          });
+          URL.revokeObjectURL(url);
+
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            // Downscale if very large
+            const maxDim = 1500;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = (height / width) * maxDim;
+                width = maxDim;
+              } else {
+                width = (width / height) * maxDim;
+                height = maxDim;
+              }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            const response = await fetch(compressedDataUrl);
+            imageData = await response.arrayBuffer();
+          }
+        } catch (err) {
+          console.error('Failed to compress image:', err);
+        }
+      }
+
       let image;
-      if (uploadedFile.file.type === 'image/jpeg' || uploadedFile.file.type === 'image/jpg') {
-        image = await mergedPdf.embedJpg(arrayBuffer);
+      if (optimize || uploadedFile.file.type === 'image/jpeg' || uploadedFile.file.type === 'image/jpg') {
+        // If we compressed it, it's now a JPG
+        image = await mergedPdf.embedJpg(imageData);
       } else if (uploadedFile.file.type === 'image/png') {
-        image = await mergedPdf.embedPng(arrayBuffer);
+        image = await mergedPdf.embedPng(imageData);
       } else {
-        // Fallback for other images if possible, or skip
         continue;
       }
 
@@ -30,16 +74,16 @@ export const mergePdfs = async (files: UploadedFile[]): Promise<Uint8Array> => {
         width: image.width,
         height: image.height,
       });
-      
-      // Apply rotation if any (simplified, as we might want to rotate the page instead)
-      if (uploadedFile.rotation) {
-        // In pdf-lib, rotation is in degrees. 
-        // We might need to adjust page dimensions if rotating 90/270
-      }
     }
   }
 
-  const mergedPdfBytes = await mergedPdf.save();
+  // Optimize if requested
+  const mergedPdfBytes = await mergedPdf.save({
+    useObjectStreams: optimize,
+    addDefaultFont: !optimize,
+    updateFieldAppearance: !optimize
+  });
+  
   return mergedPdfBytes;
 };
 
