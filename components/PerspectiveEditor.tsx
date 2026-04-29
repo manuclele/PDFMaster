@@ -349,21 +349,25 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
             <span className="text-[10px] font-bold uppercase tracking-widest">Ottimizzazione Visiva</span>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
             {/* Presets */}
-            <div className="space-y-2 lg:col-span-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">PRESET</label>
-              <div className="flex flex-wrap gap-1.5">
+            <div className="space-y-4 lg:col-span-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <Layers size={12} /> PRESET
+              </label>
+              <div className="grid grid-cols-2 gap-2">
                 {[
                   { name: 'Originale', c: 100, b: 100, s: 0, g: false },
                   { name: 'Magico', c: 135, b: 105, s: 20, g: false },
-                  { name: 'Documento', c: 160, b: 110, s: 40, g: true },
+                  { name: 'Documento', c: 165, b: 110, s: 40, g: true },
+                  { name: 'Scurisci', c: 150, b: 85, s: 10, g: false },
+                  { name: 'Schiarisci', c: 110, b: 130, s: 0, g: false },
                   { name: 'Eco', c: 110, b: 130, s: 0, g: true },
                 ].map(p => (
                   <button
                     key={p.name}
                     onClick={() => setEnhancements({ contrast: p.c, brightness: p.b, sharpness: p.s, grayscale: p.g })}
-                    className="px-2.5 py-1.5 bg-slate-800/50 hover:bg-primary-600 text-[10px] font-bold text-slate-300 hover:text-white rounded-md transition-all border border-white/5 active:scale-95"
+                    className="px-2 py-2 bg-slate-800/50 hover:bg-primary-600 text-[10px] font-bold text-slate-300 hover:text-white rounded-lg transition-all border border-white/5 active:scale-95 text-center"
                   >
                     {p.name}
                   </button>
@@ -372,63 +376,91 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
             </div>
 
             {/* Contrast */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <label className="text-[11px] font-bold text-slate-400 flex items-center gap-2">
-                  <Contrast size={12} className="text-primary-400" /> CONTRASTO
+                <label className="text-[10px] font-bold text-slate-400 flex items-center gap-2 uppercase tracking-widest">
+                  <Contrast size={12} className="text-primary-400" /> Contrasto
                 </label>
-                <span className="text-[10px] font-mono text-slate-500">{enhancements.contrast}%</span>
+                <button 
+                  onClick={() => setEnhancements(prev => ({ ...prev, contrast: 100 }))}
+                  className="text-[9px] font-bold text-slate-600 hover:text-slate-400 uppercase"
+                >
+                  Reset
+                </button>
               </div>
-              <input 
-                type="range" min="50" max="250" value={enhancements.contrast}
-                onChange={(e) => setEnhancements(prev => ({ ...prev, contrast: parseInt(e.target.value) }))}
-                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
-              />
+              <div className="flex items-center space-x-3">
+                <input 
+                  type="range" min="50" max="250" value={enhancements.contrast}
+                  onChange={(e) => setEnhancements(prev => ({ ...prev, contrast: parseInt(e.target.value) }))}
+                  className="flex-1 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                />
+                <span className="text-[10px] font-mono text-slate-500 w-8">{enhancements.contrast}%</span>
+              </div>
             </div>
 
             {/* Brightness */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <label className="text-[11px] font-bold text-slate-400 flex items-center gap-2">
-                  <Sun size={12} className="text-yellow-400" /> LUMINOSITÀ
+                <label className="text-[10px] font-bold text-slate-400 flex items-center gap-2 uppercase tracking-widest">
+                  <Sun size={12} className="text-yellow-400" /> Luminosità
                 </label>
-                <span className="text-[10px] font-mono text-slate-500">{enhancements.brightness}%</span>
+                <button 
+                  onClick={() => setEnhancements(prev => ({ ...prev, brightness: 100 }))}
+                  className="text-[9px] font-bold text-slate-600 hover:text-slate-400 uppercase"
+                >
+                  Reset
+                </button>
               </div>
-              <input 
-                type="range" min="50" max="150" value={enhancements.brightness}
-                onChange={(e) => setEnhancements(prev => ({ ...prev, brightness: parseInt(e.target.value) }))}
-                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
-              />
+              <div className="flex items-center space-x-3">
+                <input 
+                  type="range" min="50" max="150" value={enhancements.brightness}
+                  onChange={(e) => setEnhancements(prev => ({ ...prev, brightness: parseInt(e.target.value) }))}
+                  className="flex-1 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                />
+                <span className="text-[10px] font-mono text-slate-500 w-8">{enhancements.brightness}%</span>
+              </div>
             </div>
 
-            {/* Sharpness (Simulated with contrast expansion) */}
-            <div className="space-y-2">
+            {/* Sharpness */}
+            <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <label className="text-[11px] font-bold text-slate-400 flex items-center gap-2">
-                  <Zap size={12} className="text-indigo-400" /> NITIDEZZA
+                <label className="text-[10px] font-bold text-slate-400 flex items-center gap-2 uppercase tracking-widest">
+                  <Zap size={12} className="text-indigo-400" /> Nitidezza
                 </label>
-                <span className="text-[10px] font-mono text-slate-500">{enhancements.sharpness}%</span>
+                <button 
+                  onClick={() => setEnhancements(prev => ({ ...prev, sharpness: 0 }))}
+                  className="text-[9px] font-bold text-slate-600 hover:text-slate-400 uppercase"
+                >
+                  Reset
+                </button>
               </div>
-              <input 
-                type="range" min="0" max="100" value={enhancements.sharpness}
-                onChange={(e) => setEnhancements(prev => ({ ...prev, sharpness: parseInt(e.target.value) }))}
-                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
-              />
+              <div className="flex items-center space-x-3">
+                <input 
+                  type="range" min="0" max="100" value={enhancements.sharpness}
+                  onChange={(e) => setEnhancements(prev => ({ ...prev, sharpness: parseInt(e.target.value) }))}
+                  className="flex-1 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                />
+                <span className="text-[10px] font-mono text-slate-500 w-8">{enhancements.sharpness}%</span>
+              </div>
             </div>
 
-            {/* Grayscale Toggle */}
-            <div className="flex items-center justify-between sm:justify-start sm:space-x-4">
-              <label className="text-[11px] font-bold text-slate-400">BIANCO E NERO</label>
-              <button 
-                onClick={() => setEnhancements(prev => ({ ...prev, grayscale: !prev.grayscale }))}
-                className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                  enhancements.grayscale 
-                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-900/20' 
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                {enhancements.grayscale ? 'ATTIVATO' : 'DISATTIVATO'}
-              </button>
+            {/* Grayscale */}
+            <div className="flex flex-col space-y-3">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Modalità Colore</label>
+              <div className="flex p-1 bg-slate-800/80 rounded-xl">
+                <button 
+                  onClick={() => setEnhancements(prev => ({ ...prev, grayscale: false }))}
+                  className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition-all ${!enhancements.grayscale ? 'bg-primary-600 text-white shadow-lg shadow-primary-900/20' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                  A COLORI
+                </button>
+                <button 
+                  onClick={() => setEnhancements(prev => ({ ...prev, grayscale: true }))}
+                  className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition-all ${enhancements.grayscale ? 'bg-primary-600 text-white shadow-lg shadow-primary-900/20' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                  B/N
+                </button>
+              </div>
             </div>
           </div>
         </div>

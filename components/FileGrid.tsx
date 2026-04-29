@@ -29,10 +29,15 @@ export const FileGrid: React.FC<FileGridProps> = ({ files, onRemove, onMove, onE
               {file.type === 'image' && (
                 <button
                   onClick={() => onEdit(file.id)}
-                  className="text-slate-400 hover:text-primary-600 hover:bg-primary-50 p-1 rounded-full transition-colors"
-                  aria-label="Edit image"
+                  className={`flex items-center space-x-1 px-2 py-1 rounded-lg transition-all ${
+                    file.enhancements && (file.enhancements.contrast !== 100 || file.enhancements.grayscale)
+                      ? 'bg-primary-600 text-white shadow-md'
+                      : 'bg-primary-50 text-primary-600 hover:bg-primary-100'
+                  }`}
+                  title="Migliora qualità o ritaglia"
                 >
-                  <Edit2 size={18} />
+                  <Edit2 size={14} />
+                  <span className="text-[10px] font-bold">MIGLIORA</span>
                 </button>
               )}
               <button

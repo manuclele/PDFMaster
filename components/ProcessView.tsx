@@ -471,37 +471,61 @@ export const ProcessView: React.FC = () => {
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.margin = '20px 0';
-        table.style.fontSize = '10pt';
+        table.style.fontSize = '9pt';
         table.style.pageBreakInside = 'avoid';
+        table.style.breakInside = 'avoid'; // Standard property
         
         const cells = table.querySelectorAll('th, td');
         cells.forEach((cell: any) => {
           cell.style.border = '1px solid #e2e8f0';
-          cell.style.padding = '10px';
+          cell.style.padding = '8px';
+          cell.style.wordBreak = 'break-word';
         });
         
         const headers = table.querySelectorAll('th');
         headers.forEach((h: any) => {
-          h.style.backgroundColor = '#f8fafc';
-          h.style.color = '#1e293b';
+          h.style.backgroundColor = '#f1f5f9';
+          h.style.color = '#0f172a';
           h.style.textAlign = 'left';
+          h.style.fontWeight = 'bold';
         });
+      });
+
+      // Ensure sections don't break in middle if possible
+      const sections = contentWrapper.querySelectorAll('div');
+      sections.forEach((sec: any) => {
+        if (sec.classList.contains('markdown-body')) {
+          sec.style.pageBreakInside = 'auto';
+        } else {
+          sec.style.pageBreakInside = 'avoid';
+          sec.style.breakInside = 'avoid';
+        }
       });
 
       exportContainer.appendChild(contentWrapper);
       document.body.appendChild(exportContainer);
 
       // Crucial: wait for browser to actually paint the hidden element
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
       const session = sessions.find(s => s.id === currentSessionId);
       const fileName = specificMessage 
         ? `Risposta_AI_${new Date().getTime()}.pdf` 
         : `${session?.title.replace(/[^a-z0-9]/gi, '_') || 'Report'}_${new Date().getTime()}.pdf`;
 
-      // Make it temporarily visible for capture
+      // Make it temporarily visible for capture (off-screen)
+      exportContainer.style.position = 'absolute';
+      exportContainer.style.left = '-9999px';
+      exportContainer.style.top = '0';
       exportContainer.style.visibility = 'visible';
+      exportContainer.style.display = 'block';
 
       await pdf.html(exportContainer, {
         callback: (doc) => {
@@ -515,7 +539,7 @@ export const ProcessView: React.FC = () => {
         y: 10,
         width: 190,
         windowWidth: 800,
-        autoPaging: 'slice'
+        autoPaging: 'text' // Try 'text' instead of 'slice' for better table handling
       });
     } catch (err: any) {
       console.error(err);
