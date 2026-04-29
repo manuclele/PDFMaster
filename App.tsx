@@ -64,6 +64,23 @@ const App: React.FC = () => {
     try {
       setStatus({ ...status, isProcessing: true, message: 'Elaborazione scansione...' });
       
+      // If it's a PDF, we just store the enhancements and rotation metadata
+      // The actual rendering happens during merge
+      if (fileToEdit.type === 'pdf') {
+        setFiles(prev => prev.map(f => {
+          if (f.id === editingFileId) {
+            return {
+              ...f,
+              enhancements
+            };
+          }
+          return f;
+        }));
+        setEditingFileId(null);
+        setStatus({ ...status, isProcessing: false, message: '' });
+        return;
+      }
+
       const img = new Image();
       img.src = fileToEdit.preview;
       await new Promise((resolve) => (img.onload = resolve));

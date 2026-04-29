@@ -22,7 +22,7 @@ export const mergePdfs = async (
   if (optimization === 'minimum') {
     maxDim = 2500;
     quality = 0.9;
-    shouldReencode = false;
+    shouldReencode = files.some(f => f.enhancements && (f.enhancements.contrast !== 100 || f.enhancements.brightness !== 100 || f.enhancements.grayscale || f.enhancements.sharpness > 0));
   } else if (optimization === 'recommended') {
     maxDim = 1600;
     quality = 0.7;
@@ -83,7 +83,27 @@ export const mergePdfs = async (
                 // @ts-ignore
                 await page.render(renderContext).promise;
                 
-                const imgData = canvas.toDataURL('image/jpeg', quality);
+                // Apply visual enhancements if present
+                let finalCanvas = canvas;
+                if (uploadedFile.enhancements) {
+                  const e = uploadedFile.enhancements;
+                  let filterString = `brightness(${e.brightness}%) contrast(${e.contrast}%) grayscale(${e.grayscale ? 1 : 0})`;
+                  if (e.sharpness > 0) {
+                    filterString += ` contrast(${100 + e.sharpness * 0.5}%) saturate(${100 + e.sharpness * 0.2}%)`;
+                  }
+                  
+                  const filterCanvas = document.createElement('canvas');
+                  filterCanvas.width = canvas.width;
+                  filterCanvas.height = canvas.height;
+                  const fCtx = filterCanvas.getContext('2d');
+                  if (fCtx) {
+                    fCtx.filter = filterString;
+                    fCtx.drawImage(canvas, 0, 0);
+                    finalCanvas = filterCanvas;
+                  }
+                }
+                
+                const imgData = finalCanvas.toDataURL('image/jpeg', quality);
                 const response = await fetch(imgData);
                 const resBuffer = await response.arrayBuffer();
                 const image = await mergedPdf.embedJpg(resBuffer);

@@ -161,8 +161,8 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
             <ScanLine size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold tracking-tight">Perspective Scan</h2>
-            <p className="text-xs text-slate-400 font-medium">Align the grid with your document's edges</p>
+            <h2 className="text-lg font-bold tracking-tight">Ritocca e Migliora</h2>
+            <p className="text-xs text-slate-400 font-medium">Trascina gli angoli o usa i cursori in basso per la qualità</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
@@ -341,12 +341,17 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
       </div>
 
       {/* Footer & Controls */}
-      <div className="bg-slate-900/90 backdrop-blur-xl border-t border-white/10 flex flex-col sm:flex-row shadow-2xl z-40">
+      <div className="bg-slate-900 border-t-2 border-primary-500/30 flex flex-col sm:flex-row shadow-2xl z-40 relative">
         {/* Enhancements Panel */}
-        <div className="flex-1 p-4 sm:p-6 border-b sm:border-b-0 sm:border-r border-white/5 flex flex-col space-y-4">
-          <div className="flex items-center space-x-2 text-white/50 mb-2">
-            <Layers size={14} />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Ottimizzazione Visiva</span>
+        <div className="flex-1 p-4 sm:p-6 border-b sm:border-b-0 sm:border-r border-white/5 flex flex-col space-y-4 bg-slate-900/50">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2 text-primary-400">
+              <Layers size={16} />
+              <span className="text-xs font-bold uppercase tracking-widest">Regolazioni Qualità</span>
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium bg-slate-800 px-2 py-0.5 rounded">
+              L'effetto verrà applicato al documento finale
+            </div>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">

@@ -26,18 +26,18 @@ export const FileGrid: React.FC<FileGridProps> = ({ files, onRemove, onMove, onE
               {file.type === 'pdf' ? <FileText size={24} /> : <ImageIcon size={24} />}
             </div>
             <div className="flex space-x-1">
-              {file.type === 'image' && (
+              {(file.type === 'image' || file.type === 'pdf') && (
                 <button
                   onClick={() => onEdit(file.id)}
-                  className={`flex items-center space-x-1 px-2 py-1 rounded-lg transition-all ${
-                    file.enhancements && (file.enhancements.contrast !== 100 || file.enhancements.grayscale)
-                      ? 'bg-primary-600 text-white shadow-md'
-                      : 'bg-primary-50 text-primary-600 hover:bg-primary-100'
+                  className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg transition-all border ${
+                    file.enhancements && (file.enhancements.contrast !== 100 || file.enhancements.grayscale || file.enhancements.brightness !== 100)
+                      ? 'bg-primary-600 text-white border-primary-500 shadow-md scale-105'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-primary-300 hover:bg-primary-50'
                   }`}
-                  title="Migliora qualità o ritaglia"
+                  title="Regola contrasto, luminosità e ritaglio"
                 >
-                  <Edit2 size={14} />
-                  <span className="text-[10px] font-bold">MIGLIORA</span>
+                  <Edit2 size={14} className={file.enhancements ? 'text-white' : 'text-primary-600'} />
+                  <span className="text-[10px] font-bold uppercase tracking-tight">Qualità</span>
                 </button>
               )}
               <button
