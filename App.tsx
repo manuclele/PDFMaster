@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { UploadedFile, ProcessingState, ViewMode } from './types';
+import { UploadedFile, ProcessingState, ViewMode, OptimizationLevel } from './types';
 import { mergePdfs, createPdfBlob } from './utils/pdfHandler';
 import { formatFileSize } from './utils/formatters';
 import { Dropzone } from './components/Dropzone';
@@ -15,7 +15,7 @@ const App: React.FC = () => {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('merge');
   const [outputFilename, setOutputFilename] = useState<string>('documento-unito');
-  const [shouldOptimize, setShouldOptimize] = useState<boolean>(true);
+  const [optimizationLevel, setOptimizationLevel] = useState<OptimizationLevel>('recommended');
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [status, setStatus] = useState<ProcessingState>({
     isProcessing: false,
@@ -51,29 +51,42 @@ const App: React.FC = () => {
     setEditingFileId(id);
   };
 
-  const handleSaveEdit = async (corners: { tl: Point; tr: Point; br: Point; bl: Point }, rotation: number = 0) => {
+  const handleSaveEdit = async (
+    corners: { tl: Point; tr: Point; br: Point; bl: Point }, 
+    rotation: number = 0,
+    enhancements?: UploadedFile['enhancements']
+  ) => {
     if (!editingFileId) return;
 
     const fileToEdit = files.find(f => f.id === editingFileId);
     if (!fileToEdit || !fileToEdit.preview) return;
 
     try {
-      setStatus({ ...status, isProcessing: true, message: 'Correcting perspective...' });
+      setStatus({ ...status, isProcessing: true, message: 'Elaborazione scansione...' });
       
       const img = new Image();
       img.src = fileToEdit.preview;
       await new Promise((resolve) => (img.onload = resolve));
 
+      // If we have enhancements, we should prepare the filter string for the canvas
+      let filterString = '';
+      if (enhancements) {
+        filterString = `brightness(${enhancements.brightness}%) contrast(${enhancements.contrast}%) grayscale(${enhancements.grayscale ? 1 : 0})`;
+        if (enhancements.sharpness > 0) {
+          filterString += ` contrast(${100 + enhancements.sharpness * 0.5}%) saturate(${100 + enhancements.sharpness * 0.2}%)`;
+        }
+      }
+
       // If there's rotation, we need to rotate the image first or adjust points
-      // Let's rotate the image on a canvas first if rotation != 0
       let sourceImg: HTMLImageElement | HTMLCanvasElement = img;
-      if (rotation !== 0) {
+      if (rotation !== 0 || filterString) {
         const canvas = document.createElement('canvas');
         const isRotated = rotation % 180 !== 0;
         canvas.width = isRotated ? img.naturalHeight : img.naturalWidth;
         canvas.height = isRotated ? img.naturalWidth : img.naturalHeight;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          if (filterString) ctx.filter = filterString;
           ctx.translate(canvas.width / 2, canvas.height / 2);
           ctx.rotate((rotation * Math.PI) / 180);
           ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
@@ -151,7 +164,8 @@ const App: React.FC = () => {
               ...f,
               file: newFile,
               preview: newPreview,
-              corners
+              corners,
+              enhancements
             };
           }
           return f;
@@ -182,12 +196,19 @@ const App: React.FC = () => {
     }
 
     try {
-      setStatus({ isProcessing: true, message: 'Unione dei documenti in corso...', error: null });
+      const isDeepOptimizing = optimizationLevel === 'recommended' || optimizationLevel === 'maximum';
+      setStatus({ 
+        isProcessing: true, 
+        message: isDeepOptimizing 
+          ? 'Ottimizzazione profonda in corso (potrebbe richiedere tempo)...' 
+          : 'Unione dei documenti in corso...', 
+        error: null 
+      });
       
       // Artificial delay for better UX (so the user sees the processing state)
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      const mergedBytes = await mergePdfs(files, shouldOptimize);
+      const mergedBytes = await mergePdfs(files, optimizationLevel);
       const url = createPdfBlob(mergedBytes);
       const finalSize = formatFileSize(mergedBytes.length);
       
@@ -351,16 +372,23 @@ const App: React.FC = () => {
                     </div>
                     
                     <div className="flex items-center space-x-2 pr-2 border-r border-slate-200">
-                      <input
-                        type="checkbox"
-                        id="optimize"
-                        checked={shouldOptimize}
-                        onChange={(e) => setShouldOptimize(e.target.checked)}
-                        className="w-4 h-4 text-primary-600 border-slate-300 rounded focus:ring-primary-500"
-                      />
-                      <label htmlFor="optimize" className="text-xs font-bold text-slate-600 cursor-pointer select-none">
-                        Ottimizza
-                      </label>
+                      <div className="flex flex-col">
+                        <label htmlFor="optimization" className="text-[10px] font-bold text-slate-400 uppercase tracking-tight select-none leading-none mb-1">
+                          Compressione
+                        </label>
+                        <select
+                          id="optimization"
+                          value={optimizationLevel}
+                          onChange={(e) => setOptimizationLevel(e.target.value as OptimizationLevel)}
+                          disabled={status.isProcessing}
+                          className="text-[11px] font-bold text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-1 outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all cursor-pointer"
+                        >
+                          <option value="none">Nessuna (File originale)</option>
+                          <option value="minimum">Minima (Alta qualità)</option>
+                          <option value="recommended">Consigliata (Bilanciata)</option>
+                          <option value="maximum">Massima (Peso ridotto)</option>
+                        </select>
+                      </div>
                     </div>
 
                     <button
@@ -426,6 +454,7 @@ const App: React.FC = () => {
       {editingFile && editingFile.preview && (
         <PerspectiveEditor
           imageSrc={editingFile.preview}
+          initialEnhancements={editingFile.enhancements}
           onSave={handleSaveEdit}
           onCancel={() => setEditingFileId(null)}
         />

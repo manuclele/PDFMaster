@@ -1,15 +1,21 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Check, RotateCw, Maximize2, ScanLine } from 'lucide-react';
-import { Point } from '../types';
+import { X, Check, RotateCw, Maximize2, ScanLine, Sun, Contrast, Zap, Layers } from 'lucide-react';
+import { Point, UploadedFile } from '../types';
 
 interface PerspectiveEditorProps {
   imageSrc: string;
-  onSave: (corners: { tl: Point; tr: Point; br: Point; bl: Point }) => void;
+  initialEnhancements?: UploadedFile['enhancements'];
+  onSave: (
+    corners: { tl: Point; tr: Point; br: Point; bl: Point },
+    rotation: number,
+    enhancements: UploadedFile['enhancements']
+  ) => void;
   onCancel: () => void;
 }
 
 export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
   imageSrc,
+  initialEnhancements,
   onSave,
   onCancel,
 }) => {
@@ -19,6 +25,18 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0, left: 0, top: 0 });
   const [rotation, setRotation] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
+  
+  const [enhancements, setEnhancements] = useState<{
+    contrast: number;
+    brightness: number;
+    sharpness: number;
+    grayscale: boolean;
+  }>(initialEnhancements || {
+    contrast: 100,
+    brightness: 100,
+    sharpness: 0,
+    grayscale: false,
+  });
   
   // Corners in relative coordinates (0 to 1)
   const [corners, setCorners] = useState({
@@ -121,10 +139,18 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
   const handleMouseUp = () => setActiveHandle(null);
 
   const handleSave = () => {
-    (onSave as any)(corners, rotation);
+    onSave(corners, rotation, enhancements);
   };
 
   const isRotated = rotation % 180 !== 0;
+
+  // CSS Filter string for preview
+  const filterString = `
+    brightness(${enhancements.brightness}%)
+    contrast(${enhancements.contrast}%)
+    grayscale(${enhancements.grayscale ? 1 : 0})
+    ${enhancements.sharpness > 0 ? `contrast(${100 + enhancements.sharpness * 0.5}%) saturate(${100 + enhancements.sharpness * 0.2}%)` : ''}
+  `;
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col font-sans">
@@ -199,6 +225,7 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
               alt="To edit"
               onLoad={updateDisplaySize}
               className="w-full h-full object-fill pointer-events-none"
+              style={{ filter: filterString }}
               referrerPolicy="no-referrer"
             />
           </div>
@@ -298,6 +325,7 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
                 <img
                   src={imageSrc}
                   className="w-full h-full object-fill"
+                  style={{ filter: filterString }}
                   referrerPolicy="no-referrer"
                 />
               </div>
@@ -312,25 +340,113 @@ export const PerspectiveEditor: React.FC<PerspectiveEditorProps> = ({
         )}
       </div>
 
-      {/* Footer */}
-      <div className="p-6 bg-slate-900/80 backdrop-blur-md border-t border-white/5 flex items-center justify-between">
-        <div className="hidden sm:flex items-center space-x-2 text-sm text-slate-400 font-medium">
-          <div className="w-2 h-2 bg-primary-500 rounded-full animate-pulse" />
-          <span>Drag corners to the document's edges for a perfect scan.</span>
+      {/* Footer & Controls */}
+      <div className="bg-slate-900/90 backdrop-blur-xl border-t border-white/10 flex flex-col sm:flex-row shadow-2xl z-40">
+        {/* Enhancements Panel */}
+        <div className="flex-1 p-4 sm:p-6 border-b sm:border-b-0 sm:border-r border-white/5 flex flex-col space-y-4">
+          <div className="flex items-center space-x-2 text-white/50 mb-2">
+            <Layers size={14} />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Ottimizzazione Visiva</span>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8">
+            {/* Presets */}
+            <div className="space-y-2 lg:col-span-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">PRESET</label>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { name: 'Originale', c: 100, b: 100, s: 0, g: false },
+                  { name: 'Magico', c: 135, b: 105, s: 20, g: false },
+                  { name: 'Documento', c: 160, b: 110, s: 40, g: true },
+                  { name: 'Eco', c: 110, b: 130, s: 0, g: true },
+                ].map(p => (
+                  <button
+                    key={p.name}
+                    onClick={() => setEnhancements({ contrast: p.c, brightness: p.b, sharpness: p.s, grayscale: p.g })}
+                    className="px-2.5 py-1.5 bg-slate-800/50 hover:bg-primary-600 text-[10px] font-bold text-slate-300 hover:text-white rounded-md transition-all border border-white/5 active:scale-95"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Contrast */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-[11px] font-bold text-slate-400 flex items-center gap-2">
+                  <Contrast size={12} className="text-primary-400" /> CONTRASTO
+                </label>
+                <span className="text-[10px] font-mono text-slate-500">{enhancements.contrast}%</span>
+              </div>
+              <input 
+                type="range" min="50" max="250" value={enhancements.contrast}
+                onChange={(e) => setEnhancements(prev => ({ ...prev, contrast: parseInt(e.target.value) }))}
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
+              />
+            </div>
+
+            {/* Brightness */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-[11px] font-bold text-slate-400 flex items-center gap-2">
+                  <Sun size={12} className="text-yellow-400" /> LUMINOSITÀ
+                </label>
+                <span className="text-[10px] font-mono text-slate-500">{enhancements.brightness}%</span>
+              </div>
+              <input 
+                type="range" min="50" max="150" value={enhancements.brightness}
+                onChange={(e) => setEnhancements(prev => ({ ...prev, brightness: parseInt(e.target.value) }))}
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
+              />
+            </div>
+
+            {/* Sharpness (Simulated with contrast expansion) */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-[11px] font-bold text-slate-400 flex items-center gap-2">
+                  <Zap size={12} className="text-indigo-400" /> NITIDEZZA
+                </label>
+                <span className="text-[10px] font-mono text-slate-500">{enhancements.sharpness}%</span>
+              </div>
+              <input 
+                type="range" min="0" max="100" value={enhancements.sharpness}
+                onChange={(e) => setEnhancements(prev => ({ ...prev, sharpness: parseInt(e.target.value) }))}
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
+              />
+            </div>
+
+            {/* Grayscale Toggle */}
+            <div className="flex items-center justify-between sm:justify-start sm:space-x-4">
+              <label className="text-[11px] font-bold text-slate-400">BIANCO E NERO</label>
+              <button 
+                onClick={() => setEnhancements(prev => ({ ...prev, grayscale: !prev.grayscale }))}
+                className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                  enhancements.grayscale 
+                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-900/20' 
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                {enhancements.grayscale ? 'ATTIVATO' : 'DISATTIVATO'}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center space-x-4 w-full sm:w-auto">
+
+        {/* Actions panel */}
+        <div className="p-4 sm:p-6 flex items-center justify-between sm:justify-end space-x-4 min-w-[300px]">
           <button
             onClick={onCancel}
-            className="flex-1 sm:flex-none px-6 py-3 text-slate-400 font-bold hover:text-white transition-colors uppercase tracking-wider text-xs"
+            className="flex-1 sm:flex-none px-6 py-3 text-slate-400 font-bold hover:text-white transition-colors uppercase tracking-wider text-[10px]"
           >
-            Cancel
+            Annulla
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 sm:flex-none flex items-center justify-center space-x-2 px-10 py-3 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-bold shadow-xl shadow-primary-900/40 transition-all active:scale-95 uppercase tracking-wider text-xs"
+            className="flex-1 sm:flex-none flex items-center justify-center space-x-2 px-8 py-3 bg-white text-slate-900 hover:bg-primary-50 text-white rounded-xl font-bold shadow-xl transition-all active:scale-95 uppercase tracking-wider text-[10px]"
           >
-            <Check size={18} />
-            <span>Process Scan</span>
+            <Check size={16} className="text-primary-600" />
+            <span>Salva Scansione</span>
           </button>
         </div>
       </div>

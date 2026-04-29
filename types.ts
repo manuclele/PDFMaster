@@ -15,6 +15,12 @@ export interface UploadedFile {
     br: Point;
     bl: Point;
   };
+  enhancements?: {
+    contrast: number;      // 0 to 200, default 100
+    brightness: number;    // 0 to 200, default 100
+    sharpness: number;     // 0 to 100, default 0
+    grayscale: boolean;    // default false
+  };
 }
 
 export interface ProcessingState {
@@ -22,6 +28,8 @@ export interface ProcessingState {
   message: string;
   error: string | null;
 }
+
+export type OptimizationLevel = 'none' | 'minimum' | 'recommended' | 'maximum';
 
 export type ViewMode = 'merge' | 'split' | 'process';
 

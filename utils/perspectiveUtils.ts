@@ -66,7 +66,7 @@ export function getHomography(src: Point[], dst: Point[]): number[] | null {
  * Warps an image using a homography matrix.
  */
 export async function warpPerspective(
-  image: HTMLImageElement,
+  image: HTMLImageElement | HTMLCanvasElement,
   srcPoints: Point[],
   destWidth: number,
   destHeight: number
