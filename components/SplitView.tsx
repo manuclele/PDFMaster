@@ -24,6 +24,7 @@ export const SplitView: React.FC = () => {
   const [explanation, setExplanation] = useState<string>('');
   const [selectedCriteria, setSelectedCriteria] = useState<string>('');
   const [step, setStep] = useState<'upload' | 'criteria' | 'review'>('upload');
+  const [customIntervalSize, setCustomIntervalSize] = useState<number>(2);
 
   const reset = () => {
     setFile(null);
@@ -41,6 +42,20 @@ export const SplitView: React.FC = () => {
     setExplanation('');
     setSelectedCriteria('');
     setStep('upload');
+    setCustomIntervalSize(2);
+  };
+
+  const addPlan = () => {
+    const nextStart = splitPlans.length > 0 ? Math.min(splitPlans[splitPlans.length - 1].endPage + 1, pagesText.length) : 1;
+    const newPlan: SplitPlan = {
+      name: `${file?.name.replace(/\.[^/.]+$/, "")}_Parte_${splitPlans.length + 1}`,
+      startPage: nextStart,
+      endPage: Math.min(nextStart, pagesText.length)
+    };
+    const newPlans = [...splitPlans, newPlan];
+    setSplitPlans(newPlans);
+    setEditingIndex(newPlans.length - 1);
+    setEditPlan(newPlan);
   };
 
   const handleFilesSelected = async (newFiles: File[]) => {
@@ -55,14 +70,23 @@ export const SplitView: React.FC = () => {
 
     try {
       const extractedText = await extractTextFromPdf(pdfFile);
+      setPagesText(extractedText);
       const totalTextLength = extractedText.reduce((acc, curr) => acc + curr.text.trim().length, 0);
       
       if (totalTextLength === 0) {
-        setStatus({ isProcessing: false, message: '', error: 'Il PDF sembra vuoto o composto solo da immagini. L\'AI ha bisogno di testo leggibile.' });
+        // PDF behaves as images / scanned - construct default page-by-page split plan
+        const defaultPlans: SplitPlan[] = extractedText.map((p) => ({
+          name: `${pdfFile.name.replace(/\.[^/.]+$/, "")}_Pagina_${p.page}`,
+          startPage: p.page,
+          endPage: p.page
+        }));
+        setSplitPlans(defaultPlans);
+        setExplanation(`### 📷 Scansione Documento Rilevata\n\nAbbiamo rilevato che questo PDF è composto da **immagini/scansioni** senza testo digitale selezionabile.\n\nPer questo motivo, abbiamo pre-impostato una **divisione classica pagina per pagina** (ogni pagina diventerà un file separato a sé). Puoi personalizzare i nomi dei file o modificare gli intervalli di pagina usando i controlli e la tabella qui sotto!`);
+        setStep('review');
+        setStatus({ isProcessing: false, message: '', error: null });
         return;
       }
 
-      setPagesText(extractedText);
       setStatus({ isProcessing: true, message: 'L\'AI sta analizzando il contenuto per suggerire criteri di divisione...', error: null });
       
       const suggested = await suggestSplitCriteria(extractedText);
@@ -213,6 +237,28 @@ export const SplitView: React.FC = () => {
             ))}
           </div>
 
+          <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+              <h4 className="font-bold text-slate-800 text-sm">Non vuoi usare l'AI? Divisione Classica</h4>
+              <p className="text-xs text-slate-500">Dividi semplicemente ogni singola pagina in un file separato a sé.</p>
+            </div>
+            <button
+              onClick={() => {
+                const plans: SplitPlan[] = pagesText.map(p => ({
+                  name: `${file?.name.replace(/\.[^/.]+$/, "")}_Pagina_${p.page}`,
+                  startPage: p.page,
+                  endPage: p.page
+                }));
+                setSplitPlans(plans);
+                setExplanation(`### 📁 Divisione Classica per Pagina\nIl documento è stato configurato per essere diviso in singole pagine indipendenti.`);
+                setStep('review');
+              }}
+              className="px-4 py-2 bg-white border border-slate-200 hover:border-primary-400 hover:bg-primary-50 text-slate-700 rounded-lg text-xs font-bold transition-all shadow-sm shrink-0"
+            >
+              Dividi ogni pagina singolarmente
+            </button>
+          </div>
+
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-slate-100"></span>
@@ -277,22 +323,95 @@ export const SplitView: React.FC = () => {
             </button>
           </div>
 
+          {/* Quick Division recalculation panel */}
+          <div className="bg-slate-950 text-white p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wider flex items-center gap-2">
+                  <Play size={14} className="text-primary-400 fill-primary-400" /> Riorganizza Rapidamente
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">Ricalcola al volo gli intervalli per tutte le {pagesText.length} pagine del PDF</p>
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <button
+                onClick={() => {
+                  const plans = pagesText.map(p => ({
+                    name: `${file?.name.replace(/\.[^/.]+$/, "")}_Pagina_${p.page}`,
+                    startPage: p.page,
+                    endPage: p.page
+                  }));
+                  setSplitPlans(plans);
+                  setExplanation(`### 📁 Divisione Classica per Pagina\nIl documento è stato ricalcolato per dividere ogni singola pagina in file separati.`);
+                }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all border border-slate-700 active:scale-95"
+              >
+                1 Pagina per file (Dividi tutte)
+              </button>
+
+              <div className="h-5 w-px bg-slate-800 hidden sm:block"></div>
+
+              <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 shadow-inner">
+                <span className="text-slate-400 text-xs">Ogni</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={pagesText.length || 100}
+                  value={customIntervalSize}
+                  onChange={(e) => setCustomIntervalSize(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-10 text-center font-bold text-white bg-transparent outline-none ring-0 border-0 focus:ring-0 p-0 text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="text-slate-400 text-xs">pag.</span>
+                <button
+                  onClick={() => {
+                    const size = customIntervalSize;
+                    const plans: SplitPlan[] = [];
+                    for (let i = 0; i < pagesText.length; i += size) {
+                      const start = i + 1;
+                      const end = Math.min(i + size, pagesText.length);
+                      plans.push({
+                        name: `${file?.name.replace(/\.[^/.]+$/, "")}_Pagine_${start}_${end}`,
+                        startPage: start,
+                        endPage: end
+                      });
+                    }
+                    setSplitPlans(plans);
+                    setExplanation(`### 🗃️ Divisione a Intervalli Fissi\nIl documento è stato ricalcolato in gruppi di massimo **${size} pagine**.`);
+                  }}
+                  className="pl-2 pr-0 text-primary-400 hover:text-primary-300 font-bold text-xs"
+                >
+                  Applica
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+            <div className="p-6 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-800">Anteprima dei file</h2>
                 <p className="text-sm text-slate-500 mt-1">Controlla i documenti e le pagine identificate.</p>
               </div>
-              {splitPlans.length > 1 && (
+              <div className="flex items-center space-x-2 shrink-0">
                 <button
-                  onClick={applyNamingLogicFromFirst}
-                  className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-all"
-                  title="Usa il nome del primo file come base per tutti gli altri"
+                  onClick={addPlan}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-all border border-primary-200"
+                  title="Aggiungi una nuova suddivisione di file"
                 >
-                  <Wand2 size={14} />
-                  <span>Uniforma nomi</span>
+                  <span>+ Aggiungi Gruppo</span>
                 </button>
-              )}
+                {splitPlans.length > 1 && (
+                  <button
+                    onClick={applyNamingLogicFromFirst}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-all border border-indigo-200"
+                    title="Usa il nome del primo file come base per tutti gli altri"
+                  >
+                    <Wand2 size={13} />
+                    <span>Uniforma nomi</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="divide-y divide-slate-100">
