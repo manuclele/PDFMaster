@@ -94,8 +94,10 @@ export async function warpPerspective(
 
   // Use a temporary canvas to get source image data
   const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = image.naturalWidth || image.width;
-  tempCanvas.height = image.naturalHeight || image.height;
+  const imgWidth = 'naturalWidth' in image ? (image.naturalWidth || image.width) : image.width;
+  const imgHeight = 'naturalHeight' in image ? (image.naturalHeight || image.height) : image.height;
+  tempCanvas.width = imgWidth;
+  tempCanvas.height = imgHeight;
   const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
   if (!tempCtx) return null;
   tempCtx.drawImage(image, 0, 0);

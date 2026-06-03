@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-const PDFJS_VERSION = '5.5.207';
+const PDFJS_VERSION = pdfjsLib.version;
 const CDN_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}`;
 
 // Set worker source

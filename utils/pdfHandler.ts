@@ -187,7 +187,7 @@ export const mergePdfs = async (
         page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
       }
     } catch (loopErr) {
-      console.error(`Error processing file ${uploadedFile.name}:`, loopErr);
+      console.error(`Error processing file ${uploadedFile.file.name}:`, loopErr);
     }
   }
 
