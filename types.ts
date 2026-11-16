@@ -31,7 +31,32 @@ export interface ProcessingState {
 
 export type OptimizationLevel = 'none' | 'minimum' | 'recommended' | 'maximum';
 
-export type ViewMode = 'merge' | 'split' | 'process';
+export type ViewMode = 'merge' | 'split' | 'compress' | 'process';
+
+export type CompressionPreset = 'light' | 'balanced' | 'maximum' | 'custom';
+
+export interface CompressionSettings {
+  preset: CompressionPreset;
+  mode: 'raster' | 'lossless';
+  quality: number;         // 0.2 to 0.95 (JPEG quality)
+  dpi: 72 | 110 | 150 | 200;
+  grayscale: boolean;
+  stripMetadata: boolean;
+  useObjectStreams: boolean;
+  keepSmallerOriginal: boolean;
+}
+
+export interface CompressFileItem {
+  id: string;
+  file: File;
+  pageCount: number | null;
+  status: 'idle' | 'processing' | 'done' | 'error';
+  progress: number; // 0 to 100
+  compressedBytes?: Uint8Array;
+  compressedSize?: number;
+  usedOriginalFallback?: boolean;
+  error?: string;
+}
 
 export interface ChatMessage {
   role: 'user' | 'model';

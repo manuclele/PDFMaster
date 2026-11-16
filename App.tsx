@@ -6,10 +6,11 @@ import { Dropzone } from './components/Dropzone';
 import { FileGrid } from './components/FileGrid';
 import { PerspectiveEditor } from './components/PerspectiveEditor';
 import { SplitView } from './components/SplitView';
+import { CompressView } from './components/CompressView';
 import { ProcessView } from './components/ProcessView';
 import { warpPerspective } from './utils/perspectiveUtils';
 import { Point } from './types';
-import { Layers, FileStack, ArrowRight, Download, RefreshCw, AlertCircle, CheckCircle2, Edit3, FileSearch, Scissors, Combine } from 'lucide-react';
+import { Layers, FileStack, ArrowRight, Download, RefreshCw, AlertCircle, CheckCircle2, Edit3, FileSearch, Scissors, Combine, Minimize2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<UploadedFile[]>([]);
@@ -297,7 +298,7 @@ const App: React.FC = () => {
               </button>
               <button
                 onClick={() => setViewMode('split')}
-                className={`flex items-center space-x-2 px-4 py-1.5 text-sm font-bold rounded-lg transition-all ${
+                className={`flex items-center space-x-2 px-4 py-1.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap shrink-0 ${
                   viewMode === 'split' 
                     ? 'bg-white text-primary-600 shadow-sm' 
                     : 'text-slate-500 hover:text-slate-700'
@@ -307,8 +308,19 @@ const App: React.FC = () => {
                 <span className="hidden sm:inline">Dividi</span>
               </button>
               <button
+                onClick={() => setViewMode('compress')}
+                className={`flex items-center space-x-2 px-4 py-1.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap shrink-0 ${
+                  viewMode === 'compress' 
+                    ? 'bg-white text-primary-600 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Minimize2 size={16} />
+                <span className="hidden sm:inline">Comprimi</span>
+              </button>
+              <button
                 onClick={() => setViewMode('process')}
-                className={`flex items-center space-x-2 px-4 py-1.5 text-sm font-bold rounded-lg transition-all ${
+                className={`flex items-center space-x-2 px-4 py-1.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap shrink-0 ${
                   viewMode === 'process' 
                     ? 'bg-white text-primary-600 shadow-sm' 
                     : 'text-slate-500 hover:text-slate-700'
@@ -337,19 +349,27 @@ const App: React.FC = () => {
         {/* Header Section */}
         <div className={`text-center ${viewMode === 'process' ? 'mb-4' : 'mb-10'}`}>
           <h1 className={`${viewMode === 'process' ? 'text-xl' : 'text-3xl sm:text-4xl'} font-bold text-slate-800 mb-2`}>
-            {viewMode === 'merge' ? 'Unisci PDF' : viewMode === 'split' ? 'Divisione Intelligente' : 'Elabora Documenti'}
+            {viewMode === 'merge'
+              ? 'Unisci PDF'
+              : viewMode === 'split'
+              ? 'Divisione Intelligente'
+              : viewMode === 'compress'
+              ? 'Comprimi PDF'
+              : 'Elabora Documenti'}
           </h1>
           {viewMode !== 'process' && (
             <p className="text-slate-500 text-lg max-w-2xl mx-auto">
               {viewMode === 'merge' 
                 ? 'Combina più PDF in un unico documento. Trascina i file, riordinali e uniscili in un istante.'
-                : 'Carica un PDF multi-pagina e lascia che l\'AI lo divida e lo nomini automaticamente per te.'}
+                : viewMode === 'split'
+                ? 'Carica un PDF multi-pagina e lascia che l\'AI lo divida e lo nomini automaticamente per te.'
+                : 'Riduci il peso di uno o più PDF contemporaneamente regolando qualità e risoluzione, con opzione di unione.'}
             </p>
           )}
         </div>
 
         {/* Action Area */}
-        <div className="max-w-4xl mx-auto">
+        <div className={`${viewMode === 'compress' ? 'max-w-5xl' : 'max-w-4xl'} mx-auto`}>
           {viewMode === 'merge' ? (
             <>
               <Dropzone 
@@ -461,6 +481,8 @@ const App: React.FC = () => {
             </>
           ) : viewMode === 'split' ? (
             <SplitView />
+          ) : viewMode === 'compress' ? (
+            <CompressView />
           ) : (
             <ProcessView />
           )}
