@@ -52,6 +52,7 @@ export interface CompressFileItem {
   pageCount: number | null;
   status: 'idle' | 'processing' | 'done' | 'error';
   progress: number; // 0 to 100
+  estimatedSize?: number;
   compressedBytes?: Uint8Array;
   compressedSize?: number;
   usedOriginalFallback?: boolean;

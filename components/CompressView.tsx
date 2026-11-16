@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { CompressFileItem, CompressionPreset, CompressionSettings } from '../types';
 import { Dropzone } from './Dropzone';
 import { formatFileSize } from '../utils/formatters';
@@ -7,6 +7,7 @@ import {
   getPdfPageCount,
   compressSinglePdf,
   compressAndMergePdfs,
+  estimatePdfCompressedSize,
   getCompressedFilename,
   downloadPdfBytes,
   downloadCompressedZip,
@@ -51,11 +52,62 @@ export const CompressView: React.FC = () => {
     filename: string;
   } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isEstimating, setIsEstimating] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
   const addInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const itemIdsKey = items.map((i) => i.id).join(',');
+
+  // Live size estimation when files or compression settings change
+  useEffect(() => {
+    if (items.length === 0 || isProcessing) {
+      setIsEstimating(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsEstimating(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        for (const item of items) {
+          if (controller.signal.aborted) return;
+          try {
+            const { estimatedSize, pageCount } = await estimatePdfCompressedSize(
+              item.file,
+              settings,
+              controller.signal
+            );
+            if (controller.signal.aborted) return;
+            setItems((prev) =>
+              prev.map((curr) =>
+                curr.id === item.id
+                  ? {
+                      ...curr,
+                      estimatedSize,
+                      pageCount: curr.pageCount ?? pageCount,
+                    }
+                  : curr
+              )
+            );
+          } catch (err: any) {
+            if (err?.name === 'AbortError') return;
+          }
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsEstimating(false);
+        }
+      }
+    }, 220);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [itemIdsKey, settings, isProcessing]);
 
   const handleFilesSelected = async (newFiles: File[]) => {
     const pdfFiles = newFiles.filter(
@@ -95,7 +147,24 @@ export const CompressView: React.FC = () => {
     });
   };
 
+  const resetCompressionResults = () => {
+    setMergedResult(null);
+    setStatusMessage('');
+    setItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        status: 'idle',
+        progress: 0,
+        compressedBytes: undefined,
+        compressedSize: undefined,
+        usedOriginalFallback: undefined,
+        error: undefined,
+      }))
+    );
+  };
+
   const applyPreset = (presetKey: Exclude<CompressionPreset, 'custom'>) => {
+    resetCompressionResults();
     setSettings({
       preset: presetKey,
       ...COMPRESSION_PRESETS[presetKey].settings,
@@ -106,6 +175,7 @@ export const CompressView: React.FC = () => {
     key: K,
     value: CompressionSettings[K]
   ) => {
+    resetCompressionResults();
     setSettings((prev) => ({
       ...prev,
       preset: 'custom',
@@ -316,13 +386,24 @@ export const CompressView: React.FC = () => {
     (item) => item.status === 'done' && item.compressedBytes
   );
   const totalOriginalBytes = items.reduce((acc, item) => acc + item.file.size, 0);
+  const allEstimated = items.length > 0 && items.every((item) => item.estimatedSize !== undefined);
+  const totalEstimatedBytes = allEstimated
+    ? items.reduce((acc, item) => acc + (item.estimatedSize ?? item.file.size), 0)
+    : null;
   const totalCompressedBytes = completedItems.reduce(
     (acc, item) => acc + (item.compressedSize ?? item.file.size),
     0
   );
-  const totalSavedPct =
-    totalOriginalBytes > 0 && completedItems.length === items.length && items.length > 0
-      ? Math.round(((totalOriginalBytes - totalCompressedBytes) / totalOriginalBytes) * 100)
+  const hasFinalBatchSizes =
+    !mergeFiles && completedItems.length === items.length && items.length > 0;
+  const activeAfterBytes = mergeFiles && mergedResult
+    ? mergedResult.bytes.length
+    : hasFinalBatchSizes
+    ? totalCompressedBytes
+    : totalEstimatedBytes;
+  const activeSavedPct =
+    totalOriginalBytes > 0 && activeAfterBytes !== null
+      ? Math.round(((totalOriginalBytes - activeAfterBytes) / totalOriginalBytes) * 100)
       : null;
 
   const handleDownloadAllZip = async () => {
@@ -389,12 +470,19 @@ export const CompressView: React.FC = () => {
                   File caricati ({items.length})
                 </h2>
                 <p className="text-xs text-slate-500 tabular-nums mt-0.5">
-                  Peso totale originale: {formatFileSize(totalOriginalBytes)}
-                  {!mergeFiles && totalSavedPct !== null && (
+                  Prima: {formatFileSize(totalOriginalBytes)}
+                  {activeAfterBytes !== null && (
                     <>
-                      {' · '}
-                      Dopo compressione: {formatFileSize(totalCompressedBytes)} (
-                      {totalSavedPct > 0 ? `-${totalSavedPct}%` : 'invariato'})
+                      {' → '}
+                      {hasFinalBatchSizes || (mergeFiles && mergedResult)
+                        ? `Dopo: ${formatFileSize(activeAfterBytes)}`
+                        : `Dopo (stima): ~${formatFileSize(activeAfterBytes)}`}
+                      {activeSavedPct !== null && (
+                        <span className={activeSavedPct > 0 ? ' text-emerald-700 font-semibold' : ''}>
+                          {' '}
+                          ({activeSavedPct > 0 ? `-${activeSavedPct}%` : activeSavedPct === 0 ? 'invariato' : `+${Math.abs(activeSavedPct)}%`})
+                        </span>
+                      )}
                     </>
                   )}
                 </p>
@@ -434,10 +522,16 @@ export const CompressView: React.FC = () => {
 
             <div className="divide-y divide-slate-100">
               {items.map((item, index) => {
-                const savedPct =
+                const actualSavedPct =
                   item.compressedSize !== undefined && item.file.size > 0
                     ? Math.round(
                         ((item.file.size - item.compressedSize) / item.file.size) * 100
+                      )
+                    : null;
+                const estSavedPct =
+                  item.estimatedSize !== undefined && item.file.size > 0
+                    ? Math.round(
+                        ((item.file.size - item.estimatedSize) / item.file.size) * 100
                       )
                     : null;
 
@@ -458,7 +552,7 @@ export const CompressView: React.FC = () => {
                           {item.file.name}
                         </p>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 tabular-nums mt-0.5">
-                          <span>{formatFileSize(item.file.size)}</span>
+                          <span>Prima: {formatFileSize(item.file.size)}</span>
                           {item.pageCount !== null && item.pageCount > 0 && (
                             <>
                               <span aria-hidden="true">·</span>
@@ -476,17 +570,32 @@ export const CompressView: React.FC = () => {
                               </span>
                             </>
                           )}
-                          {item.status === 'done' && !mergeFiles && item.compressedSize !== undefined && (
+                          {item.status === 'done' && !mergeFiles && item.compressedSize !== undefined ? (
                             <>
                               <span aria-hidden="true">→</span>
                               <span className="font-semibold text-emerald-700">
-                                {formatFileSize(item.compressedSize)}
+                                Dopo: {formatFileSize(item.compressedSize)}
                               </span>
                               <span className="text-emerald-700 font-medium">
-                                ({savedPct && savedPct > 0 ? `-${savedPct}%` : 'originale mantenuto'})
+                                ({actualSavedPct && actualSavedPct > 0 ? `-${actualSavedPct}%` : 'originale mantenuto'})
                               </span>
                             </>
-                          )}
+                          ) : item.status !== 'error' && item.estimatedSize !== undefined ? (
+                            <>
+                              <span aria-hidden="true">→</span>
+                              <span className="font-medium text-slate-700">
+                                Stima dopo: ~{formatFileSize(item.estimatedSize)}
+                              </span>
+                              <span className={estSavedPct && estSavedPct > 0 ? 'text-emerald-700 font-medium' : 'text-slate-500'}>
+                                ({estSavedPct && estSavedPct > 0 ? `-${estSavedPct}%` : estSavedPct === 0 ? 'invariato' : `+${Math.abs(estSavedPct ?? 0)}%`})
+                              </span>
+                            </>
+                          ) : isEstimating && item.status === 'idle' ? (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="text-slate-400">Calcolo stima...</span>
+                            </>
+                          ) : null}
                           {item.status === 'error' && (
                             <>
                               <span aria-hidden="true">·</span>
@@ -863,6 +972,50 @@ export const CompressView: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Live Before / After Size Summary */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-600">
+                  Anteprima dimensioni
+                </span>
+                {isEstimating ? (
+                  <span className="text-[11px] text-slate-400">Aggiornamento...</span>
+                ) : activeSavedPct !== null ? (
+                  <span
+                    className={`text-xs font-bold tabular-nums ${
+                      activeSavedPct > 0 ? 'text-emerald-700' : 'text-slate-600'
+                    }`}
+                  >
+                    {activeSavedPct > 0
+                      ? `-${activeSavedPct}%`
+                      : activeSavedPct === 0
+                      ? '0%'
+                      : `+${Math.abs(activeSavedPct)}%`}
+                  </span>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <div className="text-[11px] text-slate-500">Prima</div>
+                  <div className="text-sm font-bold text-slate-800 tabular-nums">
+                    {formatFileSize(totalOriginalBytes)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500">
+                    {hasFinalBatchSizes || (mergeFiles && mergedResult)
+                      ? 'Dopo (finale)'
+                      : 'Dopo (stimato)'}
+                  </div>
+                  <div className="text-sm font-bold text-primary-700 tabular-nums">
+                    {activeAfterBytes !== null
+                      ? `${hasFinalBatchSizes || (mergeFiles && mergedResult) ? '' : '~'}${formatFileSize(activeAfterBytes)}`
+                      : '—'}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Primary Action Button */}

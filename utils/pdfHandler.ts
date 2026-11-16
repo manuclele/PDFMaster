@@ -203,3 +203,169 @@ export const createPdfBlob = (bytes: Uint8Array): string => {
   const blob = new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' });
   return URL.createObjectURL(blob);
 };
+
+export const estimateMergeOutputSize = async (
+  files: UploadedFile[],
+  optimization: OptimizationLevel = 'none',
+  signal?: AbortSignal
+): Promise<number> => {
+  if (files.length === 0) return 0;
+
+  let maxDim = 2000;
+  let quality = 0.8;
+  let shouldReencodePdfs = false;
+  const isOptimizing = optimization !== 'none';
+
+  if (optimization === 'minimum') {
+    maxDim = 2500;
+    quality = 0.9;
+    shouldReencodePdfs = false;
+  } else if (optimization === 'recommended') {
+    maxDim = 1600;
+    quality = 0.7;
+    shouldReencodePdfs = true;
+  } else if (optimization === 'maximum') {
+    maxDim = 1200;
+    quality = 0.5;
+    shouldReencodePdfs = true;
+  }
+
+  if (optimization === 'none') {
+    return files.reduce((acc, f) => acc + f.file.size, 0);
+  }
+
+  let estimatedTotal = 2048;
+
+  for (const uploadedFile of files) {
+    if (signal?.aborted) {
+      throw new DOMException('Stima annullata', 'AbortError');
+    }
+
+    if (uploadedFile.type === 'pdf') {
+      const hasEnhancements = Boolean(
+        uploadedFile.enhancements &&
+          (uploadedFile.enhancements.contrast !== 100 ||
+            uploadedFile.enhancements.brightness !== 100 ||
+            uploadedFile.enhancements.grayscale ||
+            uploadedFile.enhancements.sharpness > 0)
+      );
+
+      if (!shouldReencodePdfs && !(optimization === 'minimum' && hasEnhancements)) {
+        estimatedTotal += uploadedFile.file.size;
+        continue;
+      }
+
+      try {
+        const arrayBuffer = await uploadedFile.file.arrayBuffer();
+        const pdf = await pdfjs.getDocument({
+          data: arrayBuffer,
+          useSystemFonts: true,
+          disableFontFace: false,
+        }).promise;
+
+        try {
+          const numPages = pdf.numPages;
+          const samplePages =
+            numPages <= 1 ? [1] : numPages === 2 ? [1, 2] : [1, Math.ceil(numPages / 2)];
+          let sampleTotal = 0;
+
+          for (const pageIdx of samplePages) {
+            if (signal?.aborted) {
+              throw new DOMException('Stima annullata', 'AbortError');
+            }
+            const page = await pdf.getPage(pageIdx);
+            const viewport = page.getViewport({ scale: 1.5 });
+            let width = viewport.width;
+            let height = viewport.height;
+
+            if (width > maxDim || height > maxDim) {
+              const ratio = width / height;
+              if (width > height) {
+                width = maxDim;
+                height = maxDim / ratio;
+              } else {
+                height = maxDim;
+                width = maxDim * ratio;
+              }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(width));
+            canvas.height = Math.max(1, Math.round(height));
+            const ctx = canvas.getContext('2d');
+            if (!ctx) continue;
+
+            // @ts-ignore
+            await page.render({
+              canvasContext: ctx,
+              viewport: page.getViewport({ scale: (width / viewport.width) * 1.5 }),
+            }).promise;
+
+            const blob = await new Promise<Blob | null>((resolve) =>
+              canvas.toBlob((b) => resolve(b), 'image/jpeg', quality)
+            );
+            canvas.width = 0;
+            canvas.height = 0;
+
+            if (blob) sampleTotal += blob.size;
+          }
+
+          const avgPage = sampleTotal / Math.max(1, samplePages.length);
+          estimatedTotal += Math.round(avgPage * numPages + numPages * 800);
+        } finally {
+          await pdf.destroy();
+        }
+      } catch {
+        estimatedTotal += uploadedFile.file.size;
+      }
+    } else {
+      if (!isOptimizing) {
+        estimatedTotal += uploadedFile.file.size;
+        continue;
+      }
+      try {
+        const img = new Image();
+        const url = URL.createObjectURL(uploadedFile.file);
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = url;
+        });
+        URL.revokeObjectURL(url);
+
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          const ratio = width / height;
+          if (width > height) {
+            width = maxDim;
+            height = maxDim / ratio;
+          } else {
+            height = maxDim;
+            width = maxDim * ratio;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(width));
+        canvas.height = Math.max(1, Math.round(height));
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const blob = await new Promise<Blob | null>((resolve) =>
+            canvas.toBlob((b) => resolve(b), 'image/jpeg', quality)
+          );
+          canvas.width = 0;
+          canvas.height = 0;
+          estimatedTotal += blob ? blob.size : uploadedFile.file.size;
+        } else {
+          estimatedTotal += uploadedFile.file.size;
+        }
+      } catch {
+        estimatedTotal += uploadedFile.file.size;
+      }
+    }
+  }
+
+  return estimatedTotal;
+};

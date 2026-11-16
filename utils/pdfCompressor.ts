@@ -256,6 +256,129 @@ export async function compressAndMergePdfs(
   });
 }
 
+export async function estimatePdfCompressedSize(
+  file: File,
+  settings: CompressionSettings,
+  signal?: AbortSignal
+): Promise<{ estimatedSize: number; pageCount: number }> {
+  const arrayBuffer = await file.arrayBuffer();
+  if (signal?.aborted) {
+    throw new DOMException('Stima annullata', 'AbortError');
+  }
+
+  if (settings.mode === 'lossless') {
+    const srcPdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+    const pageCount = srcPdf.getPageCount();
+    if (file.size <= 8 * 1024 * 1024) {
+      const outPdf = await PDFDocument.create();
+      const copied = await outPdf.copyPages(srcPdf, srcPdf.getPageIndices());
+      copied.forEach((p) => outPdf.addPage(p));
+      if (settings.stripMetadata) {
+        clearMetadata(outPdf);
+      }
+      const bytes = await outPdf.save({
+        useObjectStreams: settings.useObjectStreams,
+        addDefaultPage: false,
+      });
+      const size = settings.keepSmallerOriginal
+        ? Math.min(bytes.length, file.size)
+        : bytes.length;
+      return { estimatedSize: size, pageCount };
+    }
+    const approx = Math.round(file.size * (settings.useObjectStreams ? 0.9 : 0.98));
+    return {
+      estimatedSize: settings.keepSmallerOriginal ? Math.min(approx, file.size) : approx,
+      pageCount,
+    };
+  }
+
+  const loadingTask = pdfjsLib.getDocument({
+    data: arrayBuffer,
+    standardFontDataUrl: `${CDN_URL}/standard_fonts/`,
+    cMapUrl: `${CDN_URL}/cmaps/`,
+    cMapPacked: true,
+    disableFontFace: false,
+    useWorkerFetch: false,
+  });
+
+  const pdf = await loadingTask.promise;
+  try {
+    const pageCount = pdf.numPages;
+    if (pageCount === 0) {
+      return { estimatedSize: file.size, pageCount: 0 };
+    }
+
+    const sampleIndices =
+      pageCount === 1
+        ? [1]
+        : pageCount === 2
+        ? [1, 2]
+        : [1, Math.ceil(pageCount / 2)];
+
+    const MAX_CANVAS_DIM = 3200;
+    const targetScale = settings.dpi / 72;
+    let totalSampleBytes = 0;
+
+    for (const pageNum of sampleIndices) {
+      if (signal?.aborted) {
+        throw new DOMException('Stima annullata', 'AbortError');
+      }
+
+      const page = await pdf.getPage(pageNum);
+      let renderViewport = page.getViewport({ scale: targetScale });
+
+      if (renderViewport.width > MAX_CANVAS_DIM || renderViewport.height > MAX_CANVAS_DIM) {
+        const clampFactor = Math.min(
+          MAX_CANVAS_DIM / renderViewport.width,
+          MAX_CANVAS_DIM / renderViewport.height
+        );
+        renderViewport = page.getViewport({ scale: targetScale * clampFactor });
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(renderViewport.width));
+      canvas.height = Math.max(1, Math.round(renderViewport.height));
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (settings.grayscale) {
+        ctx.filter = 'grayscale(100%)';
+      }
+
+      await page.render({
+        canvasContext: ctx,
+        viewport: renderViewport,
+      }).promise;
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), 'image/jpeg', settings.quality)
+      );
+
+      canvas.width = 0;
+      canvas.height = 0;
+
+      if (blob) {
+        totalSampleBytes += blob.size;
+      }
+    }
+
+    const avgPageBytes = totalSampleBytes / sampleIndices.length;
+    // Account for PDF xref/page dictionary overhead (~800 B/page + 2 KB base)
+    const rawEstimate = Math.round(avgPageBytes * pageCount + pageCount * 800 + 2048);
+    const estimatedSize = settings.keepSmallerOriginal
+      ? Math.min(rawEstimate, file.size)
+      : rawEstimate;
+
+    return { estimatedSize, pageCount };
+  } finally {
+    await pdf.destroy();
+  }
+}
+
 export function getCompressedFilename(originalName: string): string {
   const baseName = originalName.replace(/\.pdf$/i, '');
   return `${baseName}_compresso.pdf`;

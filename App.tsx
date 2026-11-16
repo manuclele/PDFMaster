@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { UploadedFile, ProcessingState, ViewMode, OptimizationLevel } from './types';
-import { mergePdfs, createPdfBlob } from './utils/pdfHandler';
+import { mergePdfs, createPdfBlob, estimateMergeOutputSize } from './utils/pdfHandler';
 import { formatFileSize } from './utils/formatters';
 import { Dropzone } from './components/Dropzone';
 import { FileGrid } from './components/FileGrid';
@@ -18,11 +18,52 @@ const App: React.FC = () => {
   const [outputFilename, setOutputFilename] = useState<string>('documento-unito');
   const [optimizationLevel, setOptimizationLevel] = useState<OptimizationLevel>('recommended');
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
+  const [estimatedMergedSize, setEstimatedMergedSize] = useState<number | null>(null);
+  const [isEstimatingMerge, setIsEstimatingMerge] = useState<boolean>(false);
   const [status, setStatus] = useState<ProcessingState>({
     isProcessing: false,
     message: '',
     error: null,
   });
+
+  useEffect(() => {
+    if (viewMode !== 'merge' || files.length === 0) {
+      setEstimatedMergedSize(null);
+      setIsEstimatingMerge(false);
+      return;
+    }
+
+    if (optimizationLevel === 'none') {
+      setEstimatedMergedSize(files.reduce((acc, f) => acc + f.file.size, 0));
+      setIsEstimatingMerge(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsEstimatingMerge(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const est = await estimateMergeOutputSize(files, optimizationLevel, controller.signal);
+        if (!controller.signal.aborted) {
+          setEstimatedMergedSize(est);
+        }
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          console.error('Merge size estimate error:', err);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsEstimatingMerge(false);
+        }
+      }
+    }, 220);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [files, optimizationLevel, viewMode]);
 
   const handleFilesSelected = (newFiles: File[]) => {
     const uploadedFiles: UploadedFile[] = newFiles.map((file) => {
@@ -226,9 +267,17 @@ const App: React.FC = () => {
       // Artificial delay for better UX (so the user sees the processing state)
       await new Promise(resolve => setTimeout(resolve, 800));
 
+      const totalBeforeBytes = files.reduce((acc, f) => acc + f.file.size, 0);
       const mergedBytes = await mergePdfs(files, optimizationLevel);
       const url = createPdfBlob(mergedBytes);
+      const beforeSize = formatFileSize(totalBeforeBytes);
       const finalSize = formatFileSize(mergedBytes.length);
+      const savedPct =
+        totalBeforeBytes > 0
+          ? Math.round(((totalBeforeBytes - mergedBytes.length) / totalBeforeBytes) * 100)
+          : 0;
+      const pctLabel =
+        savedPct > 0 ? `(-${savedPct}%)` : savedPct === 0 ? '(invariato)' : `(+${Math.abs(savedPct)}%)`;
       
       // Determine filename
       const safeName = outputFilename.trim() || 'merged-document';
@@ -243,12 +292,16 @@ const App: React.FC = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      setStatus({ isProcessing: false, message: `Merge completato! Dimensione finale: ${finalSize}`, error: null });
+      setStatus({
+        isProcessing: false,
+        message: `Merge completato! Prima: ${beforeSize} → Dopo: ${finalSize} ${pctLabel}`,
+        error: null,
+      });
       
-      // Clear success message after 5 seconds
+      // Clear success message after 8 seconds
       setTimeout(() => {
         setStatus(prev => prev.message.includes('Merge completato') ? { ...prev, message: '' } : prev);
-      }, 5000);
+      }, 8000);
     } catch (err) {
       console.error(err);
       setStatus({ 
@@ -400,12 +453,40 @@ const App: React.FC = () => {
               />
 
               {/* Floating Action Bar */}
-              {files.length > 0 && (
-                <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white/80 backdrop-blur-md border border-slate-200 shadow-2xl rounded-2xl p-2 flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-3 z-40">
+              {files.length > 0 && (() => {
+                const totalBeforeBytes = files.reduce((acc, f) => acc + f.file.size, 0);
+                const estSavedPct =
+                  estimatedMergedSize !== null && totalBeforeBytes > 0
+                    ? Math.round(((totalBeforeBytes - estimatedMergedSize) / totalBeforeBytes) * 100)
+                    : null;
+
+                return (
+                <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-md border border-slate-200 shadow-2xl rounded-2xl p-2.5 flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-3 z-40 max-w-[95vw]">
                   
                   <div className="flex items-center space-x-3 w-full sm:w-auto justify-between sm:justify-start px-2">
-                    <div className="text-sm font-medium text-slate-600 pr-2 border-r border-slate-200">
-                      {files.length} file{files.length !== 1 ? 's' : ''} ({formatFileSize(files.reduce((acc, f) => acc + f.file.size, 0))})
+                    <div className="text-xs font-medium text-slate-600 pr-2 border-r border-slate-200 tabular-nums whitespace-nowrap">
+                      <div>
+                        {files.length} file{files.length !== 1 ? 's' : ''} · Prima: <span className="font-semibold text-slate-800">{formatFileSize(totalBeforeBytes)}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        {isEstimatingMerge ? (
+                          <span>Dopo (stima): calcolo...</span>
+                        ) : estimatedMergedSize !== null ? (
+                          <span>
+                            Dopo{optimizationLevel === 'none' ? '' : ' (stima)'}:{' '}
+                            <span className="font-semibold text-primary-700">
+                              {optimizationLevel === 'none' ? '' : '~'}
+                              {formatFileSize(estimatedMergedSize)}
+                            </span>
+                            {estSavedPct !== null && optimizationLevel !== 'none' && (
+                              <span className={estSavedPct > 0 ? ' text-emerald-700 font-semibold' : ''}>
+                                {' '}
+                                ({estSavedPct > 0 ? `-${estSavedPct}%` : estSavedPct === 0 ? '0%' : `+${Math.abs(estSavedPct)}%`})
+                              </span>
+                            )}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                     
                     <div className="flex items-center space-x-2 pr-2 border-r border-slate-200">
@@ -477,7 +558,8 @@ const App: React.FC = () => {
                     )}
                   </button>
                 </div>
-              )}
+                );
+              })()}
             </>
           ) : viewMode === 'split' ? (
             <SplitView />
